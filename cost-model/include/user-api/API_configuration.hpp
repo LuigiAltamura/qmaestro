@@ -59,8 +59,10 @@ namespace maestro {
                 noc_latency_(noc_latency),
                 noc_bw_(noc_bw),
                 offchip_bw_(offchip_bw),
+                num_pes_file_(num_pes),
                 num_pes_(num_pes),
                 simd_width_(simd_width),
+                l1_size_file_(l1_sram_byte_size),
                 l1_size_(l1_sram_byte_size),
                 l2_size_(l2_sram_byte_size) {
             network_= std::make_shared<DFA::NeuralNetwork>();
@@ -90,7 +92,9 @@ namespace maestro {
         std::shared_ptr<std::vector<int>> noc_bw_;
 
         int num_pes_;
+        int num_pes_file_;
         int simd_width_;
+        int l1_size_file_;
         int l1_size_;
         int l2_size_;
         int offchip_bw_;

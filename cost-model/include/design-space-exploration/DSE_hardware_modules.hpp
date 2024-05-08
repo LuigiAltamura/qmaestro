@@ -196,6 +196,11 @@ namespace maestro {
                 ReconstructAccelerator(num_pes, vector_width, noc_bw, l1_sram_byte_size, l2_sram_byte_size);
             }
 
+            Accelerator (int num_pes, int vector_width, int noc_bw, int l1_sram_byte_size, int l2_sram_byte_size, LayerQuantizationType quantizationType)
+                    : num_pes_(num_pes), vector_width_(vector_width), noc_bw_(noc_bw) {
+                ReconstructAccelerator(num_pes, vector_width, noc_bw, l1_sram_byte_size, l2_sram_byte_size, quantizationType);
+            }
+
 
             void ReconstructAccelerator (int num_pes, int vector_width, int noc_bw, int l1_sram_byte_size, int l2_sram_byte_size) {
                 this->ClearSubmodules();
@@ -209,6 +214,47 @@ namespace maestro {
                 for(int peID = 0; peID < num_pes; peID++) {
                     std::shared_ptr<DSE::HardwareModule> pe = std::make_shared<DSE::HardwareModule>();
                     std::shared_ptr<DSE::HardwareModule> mac = std::make_shared<DSE::MAC>(cost::mac_area, cost::mac_power, vector_width);
+                    std::shared_ptr<DSE::HardwareModule> l1_sram = std::make_shared<DSE::SRAM>(cost::sram_area_64, cost::sram_power_64, cost::sram_unit_size_64, l1_sram_byte_size);
+
+                    pe->AddSubmodule(mac);
+                    pe->AddSubmodule(l1_sram);
+                    pe_array->AddSubmodule(pe);
+
+                    l1_sram_power_ += l1_sram->GetPower();
+                    pe_power_ += mac->GetPower();
+                }
+
+                /* L2 Buffer */
+                auto l2_sram = std::make_shared<DSE::SRAM>(cost::sram_area_32768, cost::sram_power_32768, cost::sram_unit_size_32768, l2_sram_byte_size);
+                l2_sram_power_ = l2_sram->GetPower();
+
+                /* NoC */
+                auto noc = std::make_shared<DSE::HardwareModule>();
+                std::shared_ptr<DSE::HardwareModule> bus = std::make_shared<DSE::Bus>(cost::bus_unit_area, cost::bus_unit_power, num_pes, noc_bw);
+                std::shared_ptr<DSE::HardwareModule> arbiter = std::make_shared<DSE::MatrixArbiter>(cost::arbiter_unit_area, cost::arbiter_unit_power, num_pes);
+
+                noc->AddSubmodule(bus);
+                noc->AddSubmodule(arbiter);
+
+                noc_power_ = noc->GetPower();
+
+                this->AddSubmodule(pe_array);
+                this->AddSubmodule(l2_sram);
+                this->AddSubmodule(noc);
+            }
+
+            void ReconstructAccelerator (int num_pes, int vector_width, int noc_bw, int l1_sram_byte_size, int l2_sram_byte_size, LayerQuantizationType quantizationType) {
+                this->ClearSubmodules();
+
+                num_pes_ = num_pes;
+                vector_width_ = vector_width;
+                noc_bw_ = noc_bw;
+
+                auto pe_array = std::make_shared<DSE::HardwareModule>();
+
+                for(int peID = 0; peID < num_pes; peID++) {
+                    std::shared_ptr<DSE::HardwareModule> pe = std::make_shared<DSE::HardwareModule>();
+                    std::shared_ptr<DSE::HardwareModule> mac = std::make_shared<DSE::MAC>(cost::mac_area_func(quantizationType), cost::mac_power_func(quantizationType), vector_width);
                     std::shared_ptr<DSE::HardwareModule> l1_sram = std::make_shared<DSE::SRAM>(cost::sram_area_64, cost::sram_power_64, cost::sram_unit_size_64, l1_sram_byte_size);
 
                     pe->AddSubmodule(mac);

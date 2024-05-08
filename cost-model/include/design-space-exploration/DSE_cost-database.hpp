@@ -59,6 +59,59 @@ namespace maestro {
         namespace cost {
             /* Embedded scaling model */
 
+            double mac_area_func(LayerQuantizationType quantizationType ){
+
+                if(quantizationType == LayerQuantizationType::FP32){
+                    return 283;
+                }else if(quantizationType == LayerQuantizationType::FP16){
+                    return 283/2;
+                }else if(quantizationType == LayerQuantizationType::FP8){
+                    return 283/4;
+                }else if(quantizationType == LayerQuantizationType::INT32){
+                    return 283;
+                }else if(quantizationType == LayerQuantizationType::INT16){
+                    return 283/2;
+                }else if(quantizationType == LayerQuantizationType::INT8){
+                    return 283/4;
+                }
+
+            }
+
+            double mac_power_func(LayerQuantizationType quantizationType ){
+
+                if(quantizationType == LayerQuantizationType::FP32){
+                    return 1.2223;
+                }else if(quantizationType == LayerQuantizationType::FP16){
+                    return 1.2223/2;
+                }else if(quantizationType == LayerQuantizationType::FP8){
+                    return 1.2223/4;
+                }else if(quantizationType == LayerQuantizationType::INT32){
+                    return 1.2223;
+                }else if(quantizationType == LayerQuantizationType::INT16){
+                    return 1.2223/2;
+                }else if(quantizationType == LayerQuantizationType::INT8){
+                    return 1.2223/4;
+                }
+
+            }
+
+            double mac_energy_func(LayerQuantizationType quantizationType ){
+
+                if(quantizationType == LayerQuantizationType::FP32){
+                    return 0.00023;
+                }else if(quantizationType == LayerQuantizationType::FP16){
+                    return 0.00023/2;
+                }else if(quantizationType == LayerQuantizationType::FP8){
+                    return 0.00023/4;
+                }else if(quantizationType == LayerQuantizationType::INT32){
+                    return 0.00023;
+                }else if(quantizationType == LayerQuantizationType::INT16){
+                    return 0.00023/2;
+                }else if(quantizationType == LayerQuantizationType::INT8){
+                    return 0.00023/4;
+                }
+
+            }
             const double mac_area = 283;
             const double mac_power = 1.2223;
             const double mac_energy = 0.00023; // nJ; Caution, it's from external source!

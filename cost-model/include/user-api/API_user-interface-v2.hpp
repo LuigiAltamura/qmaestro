@@ -76,6 +76,20 @@ namespace maestro {
 
             int layer_id = 0;
             for(auto layer : *(configuration_->network_)) {
+
+                auto quantizationType = layer->getQuantization();
+                if (quantizationType == LayerQuantizationType::FP32 || quantizationType == LayerQuantizationType::INT32){
+                    configuration_->num_pes_ = configuration_->num_pes_file_;
+                    configuration_->l1_size_ = configuration_->l1_size_file_;
+                }
+                else if (quantizationType == LayerQuantizationType::FP16 || quantizationType == LayerQuantizationType::INT16) {
+                    configuration_->num_pes_ = configuration_->num_pes_file_ * 2;
+                    configuration_->l1_size_ = configuration_->l1_size_file_ / 2;
+                } else if (quantizationType == LayerQuantizationType::FP8 || quantizationType == LayerQuantizationType::INT8) {
+                    configuration_->num_pes_ = configuration_->num_pes_file_ * 4;
+                    configuration_->l1_size_ = configuration_->l1_size_file_ / 4;
+                }
+
                 auto layer_results = AnalyzeCostAllClusters(layer_id, print_results_to_screen, print_log_to_file);
 
                 long num_macs = this->GetNumPartialSums(layer_id);
@@ -195,7 +209,9 @@ namespace maestro {
                 DFSL::HWParser hw_parser(configuration_->hw_file_name_);
                 auto ret = hw_parser.ParseHW();
                 configuration_->num_pes_ = ret->num_pes_;
+                configuration_->num_pes_file_ = ret->num_pes_;
                 configuration_->l1_size_ = ret->l1_size_;
+                configuration_->l1_size_file_ = ret->l1_size_;
                 configuration_->l2_size_ = ret->l2_size_;
                 configuration_->offchip_bw_= ret->off_chip_bw_;
                 configuration_->noc_bw_->at(0) = ret->noc_bw_;
@@ -453,6 +469,19 @@ namespace maestro {
         void AnalyzeClusters() {
             int layer_id = -1;
             for(auto layer: *(configuration_->network_)) {
+
+                auto quantizationType = layer->getQuantization();
+                if (quantizationType == LayerQuantizationType::FP32 || quantizationType == LayerQuantizationType::INT32){
+                    configuration_->num_pes_ = configuration_->num_pes_file_;
+                    //configuration_->l1_size_ = configuration_->l1_size_file_;
+                }
+                else if (quantizationType == LayerQuantizationType::FP16 || quantizationType == LayerQuantizationType::INT16) {
+                    configuration_->num_pes_ = configuration_->num_pes_file_ * 2;
+                    //configuration_->l1_size_ = configuration_->l1_size_file_ / 2;
+                } else if (quantizationType == LayerQuantizationType::FP8 || quantizationType == LayerQuantizationType::INT8) {
+                    configuration_->num_pes_ = configuration_->num_pes_file_ * 4;
+                    //configuration_->l1_size_ = configuration_->l1_size_file_ / 4;
+                }
                 layer_id++;
                 auto dataflow = layer->GetDataflow();
                 auto dimensions = layer->GetDimensions();
@@ -581,6 +610,19 @@ namespace maestro {
             long max_noc_bw_req = 0;
             long max_offchip_bw_req = 0;
             for(auto& layer_res : *analysis_result) {
+                //CAMBIARE CONF e ACCELERATOR
+
+                auto quantizationType = configuration_->network_->at(layer_id - 1)->getQuantization();
+                if (quantizationType == LayerQuantizationType::FP32 || quantizationType == LayerQuantizationType::INT32)
+                    configuration_->num_pes_ = configuration_->num_pes_file_;
+                    //configuration_->l1_size_ = configuration_->l1_size_file_;
+                else if (quantizationType == LayerQuantizationType::FP16 || quantizationType == LayerQuantizationType::INT16) {
+                    configuration_->num_pes_ = configuration_->num_pes_file_ * 2;
+                    //configuration_->l1_size_ = configuration_->l1_size_file_ / 2;
+                } else if (quantizationType == LayerQuantizationType::FP8 || quantizationType == LayerQuantizationType::INT8) {
+                    configuration_->num_pes_ = configuration_->num_pes_file_ * 4;
+                    //configuration_->l1_size_ = configuration_->l1_size_file_ / 4;
+                }
                 LayerType layer_type;
                 int cluster_lv = 0;
                 long layer_runtime = 0;
@@ -717,8 +759,8 @@ namespace maestro {
                     }
                     cluster_lv++;
                 }
-
-                layer_energy *= maestro::DSE::cost::mac_energy;
+                //CAMBIARE
+                layer_energy *= maestro::DSE::cost::mac_energy_func(quantizationType);
 
                 layer_perf_per_energy = static_cast<long double>(num_psums) / static_cast<long double>(layer_runtime) /
                                         static_cast<long double>(layer_energy);
@@ -735,7 +777,7 @@ namespace maestro {
                 long weight_tensor_size = GetTensorSize(layer_id - 1, maestro::DataClass::Weight, tensor_info_idx);
 
                 std::shared_ptr<maestro::DSE::Accelerator> accelerator = std::make_shared<maestro::DSE::Accelerator>(
-                        num_pes, vector_width, noc_bw, l1_size, l2_size);
+                        num_pes, vector_width, noc_bw, l1_size, l2_size, quantizationType);
                 area = accelerator->GetArea();
                 power = accelerator->GetPower();
 
