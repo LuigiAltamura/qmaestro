@@ -3,16 +3,20 @@ import argparse
 import os.path
 from argparse import RawTextHelpFormatter
 
-def get_dataflow_filename(model_name, layer_number):
+def get_dataflow_filename(model_name, layer_number, extension=None):
     model_name_without_extension = os.path.splitext(model_name)[0]
     model_name_without_suffix = re.sub(r'_model$', '', model_name_without_extension)
-    return f'./dataflow/{model_name_without_suffix}_{layer_number}.m'
+    if extension:
+        return f'./dataflow/{model_name_without_suffix}_{extension}_{layer_number}.m'
+    else:
+        return f'./dataflow/{model_name_without_suffix}_{layer_number}.m'
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter)
     parser.add_argument('--model_file', type=str, default="dnn_model", help="<name of your model file with layer specs>")
     parser.add_argument('--outfile', type=str, default="out.m", help='output file name')
+    parser.add_argument('--extension', type=str, default=None, help='extension to be added to the dataflow file name')
     opt = parser.parse_args()
     print('Begin processing')
     base_path = '../../data/'
@@ -25,14 +29,14 @@ if __name__ == "__main__":
                     i = 1
                     for line in fm:
                         if(re.search("DSCONV",line)):
-                                dsconv = 1
+                                dsconv = 0
                         if(re.search("Dimensions",line)):
                             fo.write(line)
                             if(dsconv):
                                     fdpt.seek(0)
                                     fo.write(fdpt.read())
                             else:
-                                dataflow_file = get_dataflow_filename(opt.model_file, i)
+                                dataflow_file = get_dataflow_filename(opt.model_file, i, opt.extension)
                                 with open(dataflow_file, "r") as fd:
                                     fd.seek(0)
                                     fo.write(fd.read())

@@ -32,7 +32,7 @@ namespace maestro{
 
 //    enum class ConvLayerDimensionIdentifier {K, C, R, S ,Y, X};
     enum class LayerType {CONV, DSCONV, FC, POOL, TRCONV, NGCONV, LSTM, GEMM, NumLayerTypes};
-    enum class LayerQuantizationType { FP32, FP16, FP8, INT32, INT16, INT8};
+    enum class LayerQuantizationType { FP32, FP16, FP8, FP4, FP2, INT32, INT16, INT8, INT4, INT2};
     
     namespace DFA {
 

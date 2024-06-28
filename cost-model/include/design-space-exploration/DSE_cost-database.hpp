@@ -67,14 +67,23 @@ namespace maestro {
                     return 283/2;
                 }else if(quantizationType == LayerQuantizationType::FP8){
                     return 283/4;
+                }else if(quantizationType == LayerQuantizationType::FP4){
+                    return 283/8;
+                }else if(quantizationType == LayerQuantizationType::FP2){
+                    return 283/16;
                 }else if(quantizationType == LayerQuantizationType::INT32){
                     return 283;
                 }else if(quantizationType == LayerQuantizationType::INT16){
                     return 283/2;
                 }else if(quantizationType == LayerQuantizationType::INT8){
                     return 283/4;
+                }else if(quantizationType == LayerQuantizationType::INT4){
+                    return 283/8;
+                }else if(quantizationType == LayerQuantizationType::INT2){
+                    return 283/16;
                 }
 
+                return 283;
             }
 
             double mac_power_func(LayerQuantizationType quantizationType ){
@@ -85,33 +94,52 @@ namespace maestro {
                     return 1.2223/2;
                 }else if(quantizationType == LayerQuantizationType::FP8){
                     return 1.2223/4;
+                }else if(quantizationType == LayerQuantizationType::FP4){
+                    return 1.2223/8;
+                }else if(quantizationType == LayerQuantizationType::FP2){
+                    return 1.2223/16;
                 }else if(quantizationType == LayerQuantizationType::INT32){
                     return 1.2223;
                 }else if(quantizationType == LayerQuantizationType::INT16){
                     return 1.2223/2;
                 }else if(quantizationType == LayerQuantizationType::INT8){
                     return 1.2223/4;
+                }else if(quantizationType == LayerQuantizationType::INT4){
+                    return 1.2223/8;
+                }else if(quantizationType == LayerQuantizationType::INT2){
+                    return 1.2223/16;
                 }
 
+                return 1.2223;
             }
 
-            double mac_energy_func(LayerQuantizationType quantizationType ){
-
-                if(quantizationType == LayerQuantizationType::FP32){
-                    return 0.00023;
-                }else if(quantizationType == LayerQuantizationType::FP16){
-                    return 0.00023/2;
-                }else if(quantizationType == LayerQuantizationType::FP8){
-                    return 0.00023/4;
-                }else if(quantizationType == LayerQuantizationType::INT32){
-                    return 0.00023;
-                }else if(quantizationType == LayerQuantizationType::INT16){
-                    return 0.00023/2;
-                }else if(quantizationType == LayerQuantizationType::INT8){
-                    return 0.00023/4;
+            double mac_energy_func(LayerQuantizationType quantizationType) {
+                // MAC(Horowitz) (nJ/op)
+                if (quantizationType == LayerQuantizationType::FP32) {
+                    return 10.752e-3;  // Convert from pJ to nJ using e-3 notation
+                } else if (quantizationType == LayerQuantizationType::FP16) {
+                    return 5.024e-3;
+                } else if (quantizationType == LayerQuantizationType::FP8) {
+                    return 2.433297297e-3;
+                } else if (quantizationType == LayerQuantizationType::FP4) {
+                    return 1.397423521e-3;
+                } else if (quantizationType == LayerQuantizationType::FP2) {
+                    return (1.397423521 / 2) * 1e-3;
+                } else if (quantizationType == LayerQuantizationType::INT32) {
+                    return 2.221124324e-3;
+                } else if (quantizationType == LayerQuantizationType::INT16) {
+                    return 1.299524324e-3;
+                } else if (quantizationType == LayerQuantizationType::INT8) {
+                    return 0.825924324e-3;
+                } else if (quantizationType == LayerQuantizationType::INT4) {
+                    return 0.608324324e-3;
+                } else if (quantizationType == LayerQuantizationType::INT2) {
+                    return 0.423756582e-3;
                 }
 
+                return 0.00023e-3;  // Convert default value from pJ to nJ using e-3 notation
             }
+
             const double mac_area = 283;
             const double mac_power = 1.2223;
             const double mac_energy = 0.00023; // nJ; Caution, it's from external source!

@@ -277,12 +277,20 @@ namespace maestro {
                                         curr_layer->setQuantization(LayerQuantizationType::FP16);
                                     } else if (tkn == DFSL::layer_quant_fp8) {
                                         curr_layer->setQuantization(LayerQuantizationType::FP8);
-                                    } else if (tkn == DFSL::layer_quant_int32) {
+                                    } else if (tkn == DFSL::layer_quant_fp4) {
+                                        curr_layer->setQuantization(LayerQuantizationType::FP4);
+                                    } else if (tkn == DFSL::layer_quant_fp2) {
+                                        curr_layer->setQuantization(LayerQuantizationType::FP2);
+                                    }else if (tkn == DFSL::layer_quant_int32) {
                                         curr_layer->setQuantization(LayerQuantizationType::INT32);
                                     } else if (tkn == DFSL::layer_quant_int16) {
                                         curr_layer->setQuantization(LayerQuantizationType::INT16);
                                     } else if (tkn == DFSL::layer_quant_int8) {
                                         curr_layer->setQuantization(LayerQuantizationType::INT8);
+                                    }else if (tkn == DFSL::layer_quant_int4) {
+                                        curr_layer->setQuantization(LayerQuantizationType::INT4);
+                                    }else if (tkn == DFSL::layer_quant_int2) {
+                                        curr_layer->setQuantization(LayerQuantizationType::INT2);
                                     } else {
                                         std::cout << "Problem with Precision. Quantization not recognized!\n";
                                         ParseError(line_number);

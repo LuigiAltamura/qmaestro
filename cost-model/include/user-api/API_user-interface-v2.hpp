@@ -78,17 +78,9 @@ namespace maestro {
             for(auto layer : *(configuration_->network_)) {
 
                 auto quantizationType = layer->getQuantization();
-                if (quantizationType == LayerQuantizationType::FP32 || quantizationType == LayerQuantizationType::INT32){
-                    configuration_->num_pes_ = configuration_->num_pes_file_;
-                    configuration_->l1_size_ = configuration_->l1_size_file_;
-                }
-                else if (quantizationType == LayerQuantizationType::FP16 || quantizationType == LayerQuantizationType::INT16) {
-                    configuration_->num_pes_ = configuration_->num_pes_file_ * 2;
-                    configuration_->l1_size_ = configuration_->l1_size_file_ / 2;
-                } else if (quantizationType == LayerQuantizationType::FP8 || quantizationType == LayerQuantizationType::INT8) {
-                    configuration_->num_pes_ = configuration_->num_pes_file_ * 4;
-                    configuration_->l1_size_ = configuration_->l1_size_file_ / 4;
-                }
+                configuration_->num_pes_ = configuration_->num_pes_file_ * quantizationFactor(quantizationType);
+                // configuration_->l1_size_ = configuration_->l1_size_file_ / quantizationFactor(quantizationType);
+
 
                 auto layer_results = AnalyzeCostAllClusters(layer_id, print_results_to_screen, print_log_to_file);
 
@@ -471,17 +463,9 @@ namespace maestro {
             for(auto layer: *(configuration_->network_)) {
 
                 auto quantizationType = layer->getQuantization();
-                if (quantizationType == LayerQuantizationType::FP32 || quantizationType == LayerQuantizationType::INT32){
-                    configuration_->num_pes_ = configuration_->num_pes_file_;
-                    //configuration_->l1_size_ = configuration_->l1_size_file_;
-                }
-                else if (quantizationType == LayerQuantizationType::FP16 || quantizationType == LayerQuantizationType::INT16) {
-                    configuration_->num_pes_ = configuration_->num_pes_file_ * 2;
-                    //configuration_->l1_size_ = configuration_->l1_size_file_ / 2;
-                } else if (quantizationType == LayerQuantizationType::FP8 || quantizationType == LayerQuantizationType::INT8) {
-                    configuration_->num_pes_ = configuration_->num_pes_file_ * 4;
-                    //configuration_->l1_size_ = configuration_->l1_size_file_ / 4;
-                }
+                configuration_->num_pes_ = configuration_->num_pes_file_ * quantizationFactor(quantizationType);
+                // configuration_->l1_size_ = configuration_->l1_size_file_ / quantizationFactor(quantizationType);
+
                 layer_id++;
                 auto dataflow = layer->GetDataflow();
                 auto dimensions = layer->GetDimensions();
@@ -581,6 +565,7 @@ namespace maestro {
 
             long l2_rd_input_count = 0;
             long l2_rd_weight_count = 0;
+            long l2_rd_output_count = 0;
             long l2_wr_input_count = 0;
             long l2_wr_weight_count = 0;
             long l2_wr_output_count = 0;
@@ -613,16 +598,9 @@ namespace maestro {
                 //CAMBIARE CONF e ACCELERATOR
 
                 auto quantizationType = configuration_->network_->at(layer_id - 1)->getQuantization();
-                if (quantizationType == LayerQuantizationType::FP32 || quantizationType == LayerQuantizationType::INT32)
-                    configuration_->num_pes_ = configuration_->num_pes_file_;
-                    //configuration_->l1_size_ = configuration_->l1_size_file_;
-                else if (quantizationType == LayerQuantizationType::FP16 || quantizationType == LayerQuantizationType::INT16) {
-                    configuration_->num_pes_ = configuration_->num_pes_file_ * 2;
-                    //configuration_->l1_size_ = configuration_->l1_size_file_ / 2;
-                } else if (quantizationType == LayerQuantizationType::FP8 || quantizationType == LayerQuantizationType::INT8) {
-                    configuration_->num_pes_ = configuration_->num_pes_file_ * 4;
-                    //configuration_->l1_size_ = configuration_->l1_size_file_ / 4;
-                }
+                configuration_->num_pes_ = configuration_->num_pes_file_ * quantizationFactor(quantizationType);
+                // configuration_->l1_size_ = configuration_->l1_size_file_ / quantizationFactor(quantizationType);
+
                 LayerType layer_type;
                 int cluster_lv = 0;
                 long layer_runtime = 0;
@@ -650,19 +628,28 @@ namespace maestro {
                         total_runtime += cluster_res->GetRuntime();
                         l2_rd_input_count = cluster_res->GetBufferAccessCount(maestro::CA::BufferType::Upstream,
                                                                               maestro::CA::BufferAccessType::Read,
-                                                                              maestro::DataClass::Input);
+                                                                              maestro::DataClass::Input)/
+                                            quantizationFactor(quantizationType);
                         l2_rd_weight_count = cluster_res->GetBufferAccessCount(maestro::CA::BufferType::Upstream,
                                                                                maestro::CA::BufferAccessType::Read,
-                                                                               maestro::DataClass::Weight);
+                                                                               maestro::DataClass::Weight)/
+                                             quantizationFactor(quantizationType);
+                        l2_rd_output_count = cluster_res->GetBufferAccessCount(maestro::CA::BufferType::Upstream,
+                                                                               maestro::CA::BufferAccessType::Read,
+                                                                               maestro::DataClass::Output)/
+                                             quantizationFactor(quantizationType);
                         l2_wr_input_count = cluster_res->GetBufferAccessCount(maestro::CA::BufferType::Upstream,
                                                                               maestro::CA::BufferAccessType::Write,
-                                                                              maestro::DataClass::Input);
+                                                                              maestro::DataClass::Input)/
+                                            quantizationFactor(quantizationType);
                         l2_wr_weight_count = cluster_res->GetBufferAccessCount(maestro::CA::BufferType::Upstream,
                                                                                maestro::CA::BufferAccessType::Write,
-                                                                               maestro::DataClass::Weight);
+                                                                               maestro::DataClass::Weight)/
+                                             quantizationFactor(quantizationType);
                         l2_wr_output_count = cluster_res->GetBufferAccessCount(maestro::CA::BufferType::Upstream,
                                                                                maestro::CA::BufferAccessType::Write,
-                                                                               maestro::DataClass::Output);
+                                                                               maestro::DataClass::Output)/
+                                             quantizationFactor(quantizationType);
 
                         long num_sub_clusters = cluster_res->GetNumSubClusters();
                         num_top_clusters = num_sub_clusters;
@@ -678,11 +665,6 @@ namespace maestro {
                                 maestro::DataClass::Weight);
 
                         layer_runtime = cluster_res->GetRuntime();
-                        layer_energy += l2_rd_input_count * maestro::l2_energy_multiplier;
-                        layer_energy += l2_wr_input_count * maestro::l2_energy_multiplier;
-                        layer_energy += l2_rd_weight_count * maestro::l2_energy_multiplier;
-                        layer_energy += l2_wr_weight_count * maestro::l2_energy_multiplier;
-                        layer_energy += l2_wr_output_count * maestro::l2_energy_multiplier;
 
                         l2_size += cluster_res->GetBufferSizeReq(maestro::CA::BufferType::Upstream,
                                                                  maestro::DataClass::Input);
@@ -690,28 +672,38 @@ namespace maestro {
                                                                  maestro::DataClass::Output);
                         l2_size += cluster_res->GetBufferSizeReq(maestro::CA::BufferType::Upstream,
                                                                  maestro::DataClass::Weight);
+
+                        layer_energy += (l2_rd_weight_count + l2_rd_input_count +l2_rd_output_count) * maestro::getMemoryEnergyMultiplier(l2_size, quantizationType, maestro::Operation::Read);
+                        layer_energy += (l2_wr_input_count + l2_wr_weight_count + l2_wr_output_count) * maestro::getMemoryEnergyMultiplier(l2_size, quantizationType, maestro::Operation::Write);
                         num_psums = cluster_res->GetNumComputations();
 
                         num_macs_top = cluster_res->GetTopNumComputations();
 
                         l1_rd_input_count = cluster_res->GetBufferAccessCount(maestro::CA::BufferType::Downstream,
                                                                               maestro::CA::BufferAccessType::Read,
-                                                                              maestro::DataClass::Input);
+                                                                              maestro::DataClass::Input) /
+                                quantizationFactor(quantizationType);
+
                         l1_rd_weight_count = cluster_res->GetBufferAccessCount(maestro::CA::BufferType::Downstream,
                                                                                maestro::CA::BufferAccessType::Read,
-                                                                               maestro::DataClass::Weight);
+                                                                               maestro::DataClass::Weight) /
+                                             quantizationFactor(quantizationType);
                         l1_rd_output_count = cluster_res->GetBufferAccessCount(maestro::CA::BufferType::Downstream,
                                                                                maestro::CA::BufferAccessType::Read,
-                                                                               maestro::DataClass::Output);
+                                                                               maestro::DataClass::Output)/
+                                             quantizationFactor(quantizationType);
                         l1_wr_input_count = cluster_res->GetBufferAccessCount(maestro::CA::BufferType::Downstream,
                                                                               maestro::CA::BufferAccessType::Write,
-                                                                              maestro::DataClass::Input);
+                                                                              maestro::DataClass::Input)/
+                                            quantizationFactor(quantizationType);
                         l1_wr_weight_count = cluster_res->GetBufferAccessCount(maestro::CA::BufferType::Downstream,
                                                                                maestro::CA::BufferAccessType::Write,
-                                                                               maestro::DataClass::Weight);
+                                                                               maestro::DataClass::Weight)/
+                                             quantizationFactor(quantizationType);
                         l1_wr_output_count = cluster_res->GetBufferAccessCount(maestro::CA::BufferType::Downstream,
                                                                                maestro::CA::BufferAccessType::Write,
-                                                                               maestro::DataClass::Output);
+                                                                               maestro::DataClass::Output)/
+                                             quantizationFactor(quantizationType);
                     }
                     if (cluster_lv == 0) {
                         /*
@@ -743,24 +735,21 @@ namespace maestro {
                                                                    maestro::DataClass::Output) - l1_wr_output_count) *
                                 num_pes * num_iters;
 
-                        layer_energy += l1_rd_input_count * maestro::l1_energy_multiplier;
-                        layer_energy += l1_wr_input_count * maestro::l1_energy_multiplier;
-                        layer_energy += l1_rd_weight_count * maestro::l1_energy_multiplier;
-                        layer_energy += l1_wr_weight_count * maestro::l1_energy_multiplier;
-                        layer_energy += l1_rd_output_count * maestro::l1_energy_multiplier;
-                        layer_energy += l1_wr_output_count * maestro::l1_energy_multiplier;
-
                         l1_size += cluster_res->GetBufferSizeReq(maestro::CA::BufferType::Downstream,
                                                                  maestro::DataClass::Input);
                         l1_size += cluster_res->GetBufferSizeReq(maestro::CA::BufferType::Downstream,
                                                                  maestro::DataClass::Output);
                         l1_size += cluster_res->GetBufferSizeReq(maestro::CA::BufferType::Downstream,
                                                                  maestro::DataClass::Weight);
+
+
+                        layer_energy += (l1_rd_input_count + l1_rd_weight_count + l1_rd_output_count) * maestro::getMemoryEnergyMultiplier(l1_size, quantizationType, maestro::Operation::Read);
+                        layer_energy += (l1_wr_input_count + l1_wr_weight_count + l1_wr_output_count) * maestro::getMemoryEnergyMultiplier(l1_size, quantizationType, maestro::Operation::Write);
                     }
                     cluster_lv++;
                 }
-                //CAMBIARE
-                layer_energy *= maestro::DSE::cost::mac_energy_func(quantizationType);
+
+                layer_energy += num_psums * maestro::DSE::cost::mac_energy_func(quantizationType);
 
                 layer_perf_per_energy = static_cast<long double>(num_psums) / static_cast<long double>(layer_runtime) /
                                         static_cast<long double>(layer_energy);
@@ -818,7 +807,7 @@ namespace maestro {
 
                 csv_writer->WriteDesignPoint(configuration_, tensor_info_idx, layer_dp, GetNetworkName(), layer_name,
                                              num_psums, input_tensor_size, weight_tensor_size, ops_per_joule, pe_power,
-                                             l1_power, l2_power, noc_power, top_res);
+                                             l1_power, l2_power, noc_power, top_res, quantizationType);
 
                 if (top_res->GetPeakBWReq() > max_noc_bw_req) {
                     max_noc_bw_req = top_res->GetPeakBWReq();
@@ -998,6 +987,30 @@ namespace maestro {
             std::cout << "Average number of utilized PEs: " << results->GetNumAvgActiveClusters() << std::endl;
             std::cout << "Arithmetic intensity: " << results->GetArithmeticIntensity() << std::endl;
 
+        }
+
+        static int quantizationFactor(LayerQuantizationType quantizationType) {
+
+            switch (quantizationType) {
+                case LayerQuantizationType::FP32:
+                case LayerQuantizationType::INT32:
+                    return 1;
+                case LayerQuantizationType::FP16:
+                case LayerQuantizationType::INT16:
+                    return 2;
+                case LayerQuantizationType::FP8:
+                case LayerQuantizationType::INT8:
+                    return 4;
+                case LayerQuantizationType::FP4:
+                case LayerQuantizationType::INT4:
+                    return 8;
+                case LayerQuantizationType::FP2:
+                case LayerQuantizationType::INT2:
+                    return 16;
+                default:
+                    std::cerr << "Unsupported quantization type" << std::endl;
+                    exit(EXIT_FAILURE);
+            }
         }
     }; // End of class API
 }; // End of namespace maestro

@@ -70,7 +70,7 @@ namespace maestro {
                     std::string nn_name,
                     std::string layer_name, long num_partial_sums, long num_inputs, long num_weights,
                     double ops_per_joule, double pe_power, double l1_power, double l2_power,
-                    double noc_power, std::shared_ptr<CA::CostAnalysisResults> cost_analysis_results) {
+                    double noc_power, std::shared_ptr<CA::CostAnalysisResults> cost_analysis_results, LayerQuantizationType quantizationType) {
                 double throughput =  static_cast<double>(num_partial_sums)/ static_cast<double>(dp->runtime_);
 
                 outfile_ << nn_name << "," << layer_name << "," << dp->num_pes_ << "," << dp->runtime_ << "," << dp->energy_ << "," << throughput << ","  << dp->performance_per_energy_
@@ -83,11 +83,14 @@ namespace maestro {
                 for(auto& tensor : *maestro_config->tensors_->at(tensor_idx)) {
                     auto dataclass = tensor->GetDataClass();
 
-                    long l1_read = cost_analysis_results->GetBufferAccessCount(CA::BufferType::Downstream, CA::BufferAccessType::Read, dataclass);
-                    long l1_write = cost_analysis_results->GetBufferAccessCount(CA::BufferType::Downstream, CA::BufferAccessType::Write, dataclass);
-                    long l2_read = cost_analysis_results->GetBufferAccessCount(CA::BufferType::Upstream, CA::BufferAccessType::Read, dataclass);
-                    long l2_write = cost_analysis_results->GetBufferAccessCount(CA::BufferType::Upstream, CA::BufferAccessType::Write, dataclass);
-
+                    long l1_read = (cost_analysis_results->GetBufferAccessCount(CA::BufferType::Downstream, CA::BufferAccessType::Read, dataclass))/
+                                   quantizationFactor(quantizationType);
+                    long l1_write = (cost_analysis_results->GetBufferAccessCount(CA::BufferType::Downstream, CA::BufferAccessType::Write, dataclass))/
+                    quantizationFactor(quantizationType);
+                    long l2_read = (cost_analysis_results->GetBufferAccessCount(CA::BufferType::Upstream, CA::BufferAccessType::Read, dataclass))/
+                                   quantizationFactor(quantizationType);
+                    long l2_write = (cost_analysis_results->GetBufferAccessCount(CA::BufferType::Upstream, CA::BufferAccessType::Write, dataclass))/
+                                    quantizationFactor(quantizationType);
                     outfile_ << l1_read << ", " << l1_write << ", " << l2_read << ", " << l2_write << ", ";
                     long double reuse_factor = static_cast<long double>(l1_read) / static_cast<long double>(l1_write);
                     outfile_ << reuse_factor << ", ";
@@ -124,6 +127,34 @@ namespace maestro {
                 outfile_ << ", " << cost_analysis_results->GetArithmeticIntensity();
 
                 outfile_ << std::endl;
+            }
+
+            /*
+             * This function permit to packed the number of access to the memory. It is assumed that 1 access can take 1 FP32 element, 2 FP16 element and so on
+             */
+            static int quantizationFactor(LayerQuantizationType quantizationType){
+
+                switch (quantizationType) {
+                    case LayerQuantizationType::FP32:
+                    case LayerQuantizationType::INT32:
+                        return 1;
+                    case LayerQuantizationType::FP16:
+                    case LayerQuantizationType::INT16:
+                        return 2;
+                    case LayerQuantizationType::FP8:
+                    case LayerQuantizationType::INT8:
+                        return 4;
+                    case LayerQuantizationType::FP4:
+                    case LayerQuantizationType::INT4:
+                        return 8;
+                    case LayerQuantizationType::FP2:
+                    case LayerQuantizationType::INT2:
+                        return 16;
+                    default:
+                        std::cerr << "Unsupported quantization type" << std::endl;
+                        exit(EXIT_FAILURE);
+                }
+
             }
 
         protected:
