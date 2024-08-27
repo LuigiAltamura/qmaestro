@@ -23,11 +23,11 @@ include_directories(cost-model/include/tools)
 include_directories(cost-model/include/user-api)
 link_directories(/opt/homebrew/lib)
 
-add_executable(maestro
+add_executable(qmaestro
         cost-model/src/BASE_base-objects.cpp
         maestro-top.cpp)
 
-target_link_libraries(maestro
+target_link_libraries(qmaestro
         Boost::program_options
         Boost::filesystem
         Boost::system

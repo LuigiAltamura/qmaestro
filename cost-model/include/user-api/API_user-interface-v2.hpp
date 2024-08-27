@@ -83,7 +83,6 @@ namespace maestro {
 
 
                 auto layer_results = AnalyzeCostAllClusters(layer_id, print_results_to_screen, print_log_to_file);
-
                 long num_macs = this->GetNumPartialSums(layer_id);
                 layer_results->at(layer_results->size()-1)->UpdateTopNumComputations(num_macs);
 
@@ -675,6 +674,7 @@ namespace maestro {
 
                         layer_energy += (l2_rd_weight_count + l2_rd_input_count +l2_rd_output_count) * maestro::getMemoryEnergyMultiplier(l2_size, quantizationType, maestro::Operation::Read);
                         layer_energy += (l2_wr_input_count + l2_wr_weight_count + l2_wr_output_count) * maestro::getMemoryEnergyMultiplier(l2_size, quantizationType, maestro::Operation::Write);
+
                         num_psums = cluster_res->GetNumComputations();
 
                         num_macs_top = cluster_res->GetTopNumComputations();

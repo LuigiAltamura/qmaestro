@@ -64,10 +64,6 @@ namespace maestro {
             {
 
                 num_mapped_elements_ = std::make_unique<std::map<std::string, int>>();
-                sp_mapped_unique_elements_ = std::make_unique<std::map<std::string, int>>();
-                tp_mapped_unique_elements_ = std::make_unique<std::map<std::string, int>>();
-                sp_mapped_reused_elements_ = std::make_unique<std::map<std::string, int>>();
-                tp_mapped_reused_elements_ = std::make_unique<std::map<std::string, int>>();
                 dataflow->ConvertToInputCentric();
                 Preprocess();
             }
@@ -160,19 +156,11 @@ namespace maestro {
             int num_steady_spatial_iterations_ = 1;
             int num_edge_spatial_iterations_ = 0;
 
-            long num_pouts_ = 0;
-
             std::shared_ptr<DFA::DimensionTable> dimensions_;
             std::shared_ptr<DFA::DirectiveTable> dataflow_;
             std::shared_ptr<AHW::NetworkOnChipModel> noc_;
 
             std::unique_ptr<std::map<std::string, int>> num_mapped_elements_; //TSz
-
-            std::unique_ptr<std::map<std::string, int>> sp_mapped_unique_elements_; //TUSz
-            std::unique_ptr<std::map<std::string, int>> tp_mapped_unique_elements_; //TUSz
-
-            std::unique_ptr<std::map<std::string, int>> sp_mapped_reused_elements_; //
-            std::unique_ptr<std::map<std::string, int>> tp_mapped_reused_elements_; //
 
             std::shared_ptr<DFA::TensorTable> tensors_;
 
@@ -227,98 +215,62 @@ namespace maestro {
                 inner_temporal_map_idx_ = inner_temporal_map_index;
             }
 
-            void AnalyzeNumSpatialIterations() {
-                auto upper_spatial_map_directive = dataflow_->at(upper_spatial_map_idx_);
-                auto spatially_mapped_dimension = upper_spatial_map_directive->GetVariable();
 
-                auto sp_dim_size = dimensions_->GetSize(spatially_mapped_dimension);
-                auto sp_map_ofs = upper_spatial_map_directive->GetOfs();
 
-                num_spatial_iterations_ = sp_dim_size / (sp_map_ofs * cluster_size_); // TODO: Double-check this
-
-                //This covers edges (either init-edge or normal spatial edge)
-                if(sp_dim_size % (sp_map_ofs * cluster_size_) != 0) {
-                    num_spatial_iterations_++;
-                }
-            }
-
-            void AnalyzeMappingSizes() {
-                int idx = 0;
-
-                for(auto& directive : *dataflow_) {
-                    auto loop_var = directive->GetVariable();
-
-                    (*num_mapped_elements_)[loop_var] = directive->GetSize();
-
-                    if(directive->GetClass() == directive::DirectiveClass::SpatialMap) {
-                        (*sp_mapped_unique_elements_)[loop_var] = directive->GetOfs();
-                        (*tp_mapped_unique_elements_)[loop_var] = directive->GetSize();
-                    }
-                    else { // if the directive is TemporalMap
-                        (*sp_mapped_unique_elements_)[loop_var] = 0;
-                        (*tp_mapped_unique_elements_)[loop_var] = (idx == inner_temporal_map_idx_)? directive->GetOfs() : directive->GetSize();
-                    }
-
-                    (*sp_mapped_reused_elements_)[loop_var] = (*num_mapped_elements_)[loop_var] - (*sp_mapped_unique_elements_)[loop_var];
-                    (*tp_mapped_reused_elements_)[loop_var] = (*num_mapped_elements_)[loop_var] - (*tp_mapped_unique_elements_)[loop_var];
-
-                    idx++;
-                } // End of for_each (directive)
-            }
-
+            /*
+             * - num_spatial_edge_clusters_ = number of clusters which are in spatial edge (not all clusters operative) (Init or Edge status)
+             * - num_edge_spatial_iterations_ = equal to 1 or zero, depending on the existence of edge cases (Init or Edge status)
+             *   used in function DFA_cluster-unit.hpp::HasSpatialEdgeCase(),
+             *   called by CA_cost-analysis-engine.hpp::GetNumCaseOccurrence(),
+             *   called by std::shared_ptr<CostAnalyisResults> AnalyzeSingleCluster(),
+             *   which is NEVER USED
+             *   - num_steady_spatial_iterations_ = used only inside AnalyzeSpatialEdgeCase()
+             */
+            // #include <cmath>
             void AnalyzeSpatialEdgeCase() {
                 auto sp_map_directive = dataflow_->at(upper_spatial_map_idx_);
                 auto sp_var = sp_map_directive->GetVariable();
+                /* LF: this value is inherited from the upper level cluster: if SpatialMap(a,a) X,
+                * and in the upper cluster X tile is z, GetSize() will give z */
                 auto sp_dim_sz = dimensions_->GetSize(sp_var);
-
-                // Handle sliding window overlaps
-                /*
-                if(dimensions_->IsOverlapped(sp_var) && !dimensions_->IsSlidingDim(sp_var)) {
-                  auto overlap_dim = dimensions_->GetOverlappingDim(sp_var);
-                  sp_dim_sz = sp_dim_sz - dimensions_->GetSize(overlap_dim) + 1;
-                }
-                 */
                 int map_size = sp_map_directive->GetSize();
                 int map_ofs = sp_map_directive->GetOfs();
 
-                // TODO: Double check this; Currently it ignores out-of-bound caused by mapping size
-                // Note: It should be fine with overlapped dimensions (input column/row in conv) if the given dataflow is legal
-                // Note: This is now handled below (beta version)
-                int each_sp_iter_base_coverage = (sp_map_directive->GetOfs() * cluster_size_);
-                int each_sp_iter_full_coverage = (sp_map_directive->GetOfs() * (cluster_size_-1)) + sp_map_directive->GetSize();
+                num_spatial_edge_clusters_ = 0;
+                num_edge_spatial_iterations_ = 0;
+                int remaining_items = 0;
 
-                if(sp_dim_sz > each_sp_iter_full_coverage) {
-                    auto sp_dim_to_cover_after_first_sp_iter = (sp_dim_sz-each_sp_iter_base_coverage);
+                int each_sp_iter_full_coverage = (map_ofs * (cluster_size_-1)) + map_size;
 
-                    num_steady_spatial_iterations_ = ((sp_dim_sz - map_size) / map_ofs + 1) / cluster_size_ -1;
-                    num_edge_spatial_iterations_ = ((num_steady_spatial_iterations_ + 1) * (map_ofs * cluster_size_) + each_sp_iter_full_coverage > sp_dim_sz )? 1 : 0;
+                // > or >=?
+                if(sp_dim_sz >= each_sp_iter_full_coverage) {
 
-                    int remaining_items = sp_dim_sz - (num_steady_spatial_iterations_ + 1) * map_ofs * cluster_size_;
+                    num_steady_spatial_iterations_ = ((sp_dim_sz - map_size) / map_ofs + 1) / cluster_size_ - 1;
+                    int tot_coverage = ((num_steady_spatial_iterations_ + 1) * cluster_size_ - 1) * map_ofs + map_size;
 
-                    if(remaining_items < map_size) {
-                        num_spatial_edge_clusters_ = 1;
-                    }
-                    else {
-                        num_spatial_edge_clusters_ = (remaining_items - map_size) / map_ofs + 1; // TODO: Fix
+                    if (sp_dim_sz == tot_coverage) { remaining_items = 0; }
+                    //the remaining items are the dimension - total coverage??
+                    else { remaining_items = sp_dim_sz - ((num_steady_spatial_iterations_ + 1) * cluster_size_) * map_ofs; }
+                    //else { remaining_items = sp_dim_sz - ((num_steady_spatial_iterations_ + 1) * cluster_size_ -1) * map_ofs + map_size; }
+
+                    if (remaining_items == 0) {
+                        num_spatial_edge_clusters_ = 0;
+                        num_edge_spatial_iterations_ = 0;
+                    } else {
+                        num_edge_spatial_iterations_ = 1;
+
+                        if (remaining_items < map_size) { num_spatial_edge_clusters_ = 1; } // LF: first element ... is_first_pe
+                        else { num_spatial_edge_clusters_ = ceil((double) (remaining_items - map_size) / (double) map_ofs + 1); }
                     }
                 }
                 else {
-                    num_steady_spatial_iterations_ = 0;
                     num_edge_spatial_iterations_ = 1;
-                    if(sp_dim_sz > sp_map_directive->GetSize()) {
-                        num_spatial_edge_clusters_ = (sp_dim_sz -  map_size) / map_ofs + 1; // TODO: Fix
-                        int sp_edge_clsuter_coverage = (sp_map_directive->GetOfs() * (num_spatial_edge_clusters_-1)) + sp_map_directive->GetSize();
-                        if(sp_edge_clsuter_coverage < sp_dim_sz) num_spatial_edge_clusters_++;
+                    if(sp_dim_sz > map_size) {
+                        num_spatial_edge_clusters_ = ceil((double)(sp_dim_sz - map_size) / (double)map_ofs + 1);
+                        if(sp_dim_sz<=(num_spatial_edge_clusters_-1)*map_ofs) {num_spatial_edge_clusters_ = num_spatial_edge_clusters_ - 1;}
                     }
-                    else {
-                        num_spatial_edge_clusters_ = 1;
-                    }
+                    else {num_spatial_edge_clusters_ = 1;}
                 }
-                if(sp_dim_sz <= sp_map_directive->GetSize()) {
-                    num_spatial_edge_clusters_ = 1;
-                }
-                // End of original version
-
 
 #ifdef DEBUG_CLUSTER_UNIT
                 std::cout << "Cluster lv: " << cluster_level_ << std::endl;
@@ -328,43 +280,11 @@ namespace maestro {
 #endif
             }
 
-
-            void AnalyzeNumPartialOutputs() {
-                long num_pouts = 1;
-
-                for(auto& dim : *dimensions_) {
-                    auto dim_name = dim->GetName();
-
-                    if(dim_name == DFSL::layer_dim_output_width_ || dim_name == DFSL::layer_dim_output_height_) {
-                        continue;
-                    }
-
-                    if(dimensions_->IsOverlapped(dim_name)) {
-                        if(dimensions_->IsSlidingDim(dim_name)) {
-                            num_pouts *= dim->GetSize();
-                        }
-                        else {
-                            auto sliding_dim_name = dimensions_->GetOverlappingDim(dim_name);
-                            int sliding_dim_size = dimensions_->GetSize(sliding_dim_name);
-                            int adjusted_size =  dim->GetSize() - sliding_dim_size + 1;
-                            num_pouts *= (adjusted_size > 0)? dim->GetSize() - sliding_dim_size + 1 : dim->GetSize();
-                        }
-                    }
-                    else {
-                        num_pouts *= dim->GetSize();
-                    }
-
-                }
-            } // End of void AnalyzeNumPartialOutputs()
-
             void Preprocess() {
                 //Functions regarding spatial mapping always need to be called first
                 AnalyzeSpatialMapIdx();
                 AnalyzeInnerTemporalMapIdx();
-                AnalyzeNumSpatialIterations();
                 AnalyzeSpatialEdgeCase();
-                AnalyzeMappingSizes();
-                AnalyzeNumPartialOutputs();
             }
         }; // End of class ClusterUnit
     } // End of namespace DFA

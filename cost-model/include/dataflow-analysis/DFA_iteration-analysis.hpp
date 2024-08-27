@@ -87,6 +87,7 @@ namespace maestro {
                     int map_size = directive->GetSize();
                     int map_ofs = directive->GetOfs();
 
+                    /* LF: list of iteration states */
                     std::shared_ptr<std::vector<std::shared_ptr<DFA::IterationState>>> iter_state_list = std::make_shared<std::vector<std::shared_ptr<DFA::IterationState>>>();
 
                     if(directive_class == DFA::directive::DirectiveClass::TemporalMap) {
@@ -97,9 +98,12 @@ namespace maestro {
                         iter_state_list->push_back(init_state);
 
                         // 2. Steady case
+                        /* LF: TODO I dont think this is correct... see comments on AnalyzeInputMappingSizes()
+                         *          Check all the conditions... (dim_size == map_size), (dim_size < map_size) --> Init case???
+                         */
                         int num_tp_steady_iters = (dim_size - map_size) / map_ofs;
                         bool has_tp_steady_state = map_size < dim_size;
-                        bool has_tp_edge_state = num_tp_steady_iters * map_ofs + map_size < dim_size ;
+                        bool has_tp_edge_state = num_tp_steady_iters * map_ofs + map_size < dim_size;
 
 #ifdef DEBUG_ITERATION_ANALYSIS
                         std::cout << "Num tp_steady states = " << dim_size << " - " << map_size << " / " << map_ofs << std::endl;
@@ -107,7 +111,6 @@ namespace maestro {
 
                         if(has_tp_steady_state && num_tp_steady_iters > 0) {
                             auto steady_state = std::make_shared<DFA::IterationState>(directive_var, IterationPosition::Steady, num_tp_steady_iters, false, false);
-
                             iter_state_list->push_back(steady_state);
                         }
 
@@ -124,70 +127,55 @@ namespace maestro {
                         int spatial_coverage = map_size + map_ofs * (num_sub_clusters -1);
                         bool is_init_unroll = dim_size <= spatial_coverage;
                         bool is_init_edge = dim_size < spatial_coverage;
+                        bool has_init_sp_edge_edge = false;
 
-                        int init_edge_normal_sp_iters = (dim_size - map_size) / map_ofs + 1;
-
-                        bool has_init_sp_edge_edge = is_init_edge;
-//              bool has_init_sp_edge_edge = is_init_edge && (init_edge_normal_sp_iters * map_ofs + map_size > dim_size);
+                        if (dim_size < map_size){has_init_sp_edge_edge = true;}
+                        else {
+                            int num_init_full_clusters = ((dim_size - map_size) / map_ofs + 1);
+                            has_init_sp_edge_edge = (dim_size > num_init_full_clusters * map_ofs);
+                        }
+                        has_init_sp_edge_edge = has_init_sp_edge_edge && is_init_edge;
 
                         auto init_state = std::make_shared<DFA::IterationState>(directive_var, IterationPosition::Init, 1, is_init_unroll, is_init_edge, has_init_sp_edge_edge);
                         iter_state_list->push_back(init_state);
 
                         // 2. Steady case
-                        bool has_sp_steady_state = spatial_coverage < dim_size;
-                        int num_sp_steady_iters = ((dim_size - map_size) / map_ofs + 1) / num_sub_clusters -1; // Cluster array granularity
-                        bool has_sp_edge_state =
-                                !is_init_unroll
-                                && (((num_sp_steady_iters + 1) * (map_ofs * num_sub_clusters) + spatial_coverage > dim_size)
-                                    &&  ((num_sp_steady_iters) * (map_ofs * num_sub_clusters) + spatial_coverage != dim_size)); // + 1 : Init case
+                        int num_sp_steady_iters = 0;
+                        if(dim_size > spatial_coverage) {num_sp_steady_iters = ((dim_size - map_size) / map_ofs + 1) / num_sub_clusters -1;}
+                        else {num_sp_steady_iters = 0;}
+                        bool has_sp_steady_state = (num_sp_steady_iters > 0);
 
-
-
-#ifdef DEBUG_ITERATION_ANALYSIS
-                        std::cout << "init_edge_normal_sp_iters: " << init_edge_normal_sp_iters << std::endl;
-              std::cout << "coverage: " << init_edge_normal_sp_iters * map_ofs + map_size << std::endl;
-              std::cout << "spatial_coverage: " << spatial_coverage <<std::endl;
-
-              std::cout << "Sp coverage (if full util): " << num_sp_steady_iters + 1 << " * " << map_ofs << " * " << num_sub_clusters << " + " << spatial_coverage << std::endl;
-              std::cout << "dim size: " << dim_size << std::endl;
-
-              if(has_sp_edge_state) {
-                std::cout << "Has Edge!" << std::endl;
-              }
-#endif
-
-                        if(has_sp_steady_state && num_sp_steady_iters > 0) {
+                        if(has_sp_steady_state) {
                             auto steady_state = std::make_shared<DFA::IterationState>(directive_var, IterationPosition::Steady, num_sp_steady_iters, false, false);
                             iter_state_list->push_back(steady_state);
                         }
 
                         //3 . Edge case
+                        int remaining_items = 0;
                         bool has_sp_edge_edge = false;
+                        bool has_edge_state = false;
 
-                        int remaining_items = dim_size - (num_sp_steady_iters + 1) * map_ofs * num_sub_clusters;
-                        int num_active_sub_clusters_at_edge;
+                        if(dim_size > spatial_coverage) {
 
-#ifdef DEBUG_ITERATION_ANALYSIS
-                        std::cout << "remaining_items: " << remaining_items <<std::endl;
-              std::cout << "dim_size: " << dim_size <<std::endl;
-              std::cout << "num_sp_steady_iters: " << num_sp_steady_iters <<std::endl;
-              std::cout << "map_ofs: " << map_ofs <<std::endl;
-              std::cout << "num_sub_clusters: " << num_sub_clusters <<std::endl;
-#endif
+                            int tot_coverage = ((num_sp_steady_iters +1)*num_sub_clusters -1)*map_ofs + map_size;
+                            if (dim_size == tot_coverage) {remaining_items = 0;}
+                            else {remaining_items = dim_size - ((num_sp_steady_iters + 1) * num_sub_clusters)* map_ofs;}
 
-                        if(remaining_items < map_size) {
-                            num_active_sub_clusters_at_edge = 1;
-                        }
-                        else {
-                            num_active_sub_clusters_at_edge = (remaining_items - map_size) / map_ofs + 1;
-                        }
-
-                        if((num_active_sub_clusters_at_edge-1) * map_ofs + map_size < remaining_items) {
-                            num_active_sub_clusters_at_edge++;
-                            has_sp_edge_edge = true;
+                            if (remaining_items == 0) {
+                                has_sp_edge_edge = false;
+                                has_edge_state = false;
+                            }
+                            else {
+                                has_edge_state = true;
+                                if(remaining_items < map_size) {has_sp_edge_edge = true;}
+                                else {
+                                    int num_init_full_clusters = ((dim_size - map_size) / map_ofs + 1);
+                                    has_sp_edge_edge = (dim_size > num_init_full_clusters*map_ofs);
+                                }
+                            }
                         }
 
-                        if(!is_init_edge && has_sp_edge_state) {
+                        if(has_edge_state) {
                             auto edge_state = std::make_shared<DFA::IterationState>(directive_var, IterationPosition::Edge, 1, false, false, has_sp_edge_edge);
                             iter_state_list->push_back(edge_state);
                         }
@@ -197,62 +185,45 @@ namespace maestro {
                 } // End of for_each (directive in dataflow)
             } // End of void AnalyzeIterationStates
 
-            void ConstructIterationStatusTable() {
-                int num_dimensions = valid_iteration_states_->size();
 
-                int num_total_cases = 1;
-                for(auto& dim_iter_states : *valid_iteration_states_) {
-                    num_total_cases *=  dim_iter_states->size();
-                }
+           void ConstructIterationStatusTable() {
+               int num_dimensions = valid_iteration_states_->size();
 
-                std::unique_ptr<std::vector<int>> recursive_occurrence_counters = std::make_unique<std::vector<int>>();
+               // Calculate the total number of combinations
+               int num_total_cases = 1;
+               for (auto& dim_iter_states : *valid_iteration_states_) {
+                   num_total_cases *= dim_iter_states->size();
+               }
 
-                std::reverse(valid_iteration_states_->begin(), valid_iteration_states_->end());
-                int num_accumulative_occurrences = 1;
-                for(auto& dim_iter_states : *valid_iteration_states_) {
-                    recursive_occurrence_counters->push_back(num_accumulative_occurrences);
-                    num_accumulative_occurrences *= dim_iter_states->size();
-                }
-                std::reverse(valid_iteration_states_->begin(), valid_iteration_states_->end());
-                std::reverse(recursive_occurrence_counters->begin(), recursive_occurrence_counters->end());
+               // Create a vector to hold the current indices for each dimension
+               std::vector<int> current_indices(num_dimensions, 0);
 
-                std::unique_ptr<std::vector<int>> iteration_counters = std::make_unique<std::vector<int>>();
-                for(int i = 0; i < num_dimensions; i++) {
-                    iteration_counters->push_back(0);
-                }
+               for (int case_id = 0; case_id < num_total_cases; case_id++) {
+                   std::shared_ptr<IterationStatus> iter_status_this_case = std::make_shared<IterationStatus>();
+                   int num_occurrence = 1;
 
+                   // Add the current combination of states to iter_status_this_case
+                   for (int dim = 0; dim < num_dimensions; dim++) {
+                       auto& dim_iter_states = valid_iteration_states_->at(dim);
+                       auto this_state = dim_iter_states->at(current_indices[dim]);
+                       iter_status_this_case->AddIterState(this_state);
+                       num_occurrence *= this_state->GetNumOccurrence();
+                   }
 
-                for(int case_id = 0; case_id < num_total_cases; case_id++) {
-                    std::shared_ptr<IterationStatus> iter_status_this_case = std::make_shared<IterationStatus>();
+                   iter_status_this_case->SetNumOccurrences(num_occurrence);
+                   iteration_status_table_->push_back(iter_status_this_case);
 
-                    int num_occurrence = 1;
-                    int idx = 0;
+                   // Increment the indices for the next combination
+                   for (int dim = num_dimensions - 1; dim >= 0; dim--) {
+                       current_indices[dim]++;
+                       if (current_indices[dim] < valid_iteration_states_->at(dim)->size()) {
+                           break;
+                       }
+                       current_indices[dim] = 0; // Reset and carry over to the next dimension
+                   }
+               }
+           }
 
-                    for(auto& dim_iter_states : *valid_iteration_states_) {
-                        int change_frequency = recursive_occurrence_counters->at(idx);
-                        int state_idx = iteration_counters->at(idx);
-
-                        auto this_state = dim_iter_states->at(state_idx);
-                        iter_status_this_case->AddIterState(this_state);
-
-                        num_occurrence *= this_state->GetNumOccurrence();
-
-                        if(case_id % change_frequency == 0) {
-                            if(state_idx + 1 == dim_iter_states->size()) {
-                                iteration_counters->at(idx) = 0;
-                            }
-                            else {
-                                iteration_counters->at(idx) = state_idx + 1;
-                            }
-                        }
-
-                        idx++;
-                    }
-
-                    iter_status_this_case->SetNumOccurrences(num_occurrence);
-                    iteration_status_table_->push_back(iter_status_this_case);
-                }
-            } // End of void ConstructIterationStatusTable
         }; // End of class IterationAnalysis
     }
 }

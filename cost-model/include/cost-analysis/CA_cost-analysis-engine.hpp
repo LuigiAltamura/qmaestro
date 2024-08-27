@@ -129,6 +129,7 @@ namespace maestro {
                 long num_total_cases = 0;
                 int case_id = 0;
                 for (auto &iteration_case: *all_iteration_cases) {
+                    // updated done only for the first iteration. The { Init, Init, Init, ....} case
                     if (case_id == 0) {
                         UpdateBufferSizeReq(results, dimensions, reuse_analysis, iteration_case, cluster_idx,
                                             num_cluster_lvs, do_double_buffering);
@@ -148,12 +149,12 @@ namespace maestro {
                     long egress_spatial_traffic = 0;
 
                     long num_partial_sums = 0;
-                    long tensor_spatial_partial_sum_mapping_size = 0;
+
                     for (auto &tensor: *output_tensors) {
                         long tensor_egress_traffic = reuse_analysis->GetSpatialEgressTraffic(tensor, iteration_case);
                         long tensor_spatial_mapping_size = reuse_analysis->GetOutputTensorSpatialMappingSize(tensor,
                                                                                                              iteration_case);
-                        tensor_spatial_partial_sum_mapping_size += reuse_analysis->GetOutputTensorSpatialMappingSize(
+                        num_partial_sums +=  reuse_analysis->GetOutputTensorSpatialMappingSize(
                                 tensor, iteration_case, true);
                         auto data_class = tensor->GetDataClass();
 
@@ -161,8 +162,8 @@ namespace maestro {
                             log_file << "Output Tensor " << tensor->GetTensorName() << std::endl;
                             log_file << "\tegress_traffic " << tensor_egress_traffic << std::endl;
                             log_file << "\tspatial_mapping_size" << tensor_spatial_mapping_size << std::endl;
-                            log_file << "\ttensor_spatial_partial_sum_mapping_size"
-                                     << tensor_spatial_partial_sum_mapping_size << std::endl;
+                            log_file << "\tnum_partial_sums"
+                                     << num_partial_sums << std::endl;
                         }
 
 
@@ -182,7 +183,7 @@ namespace maestro {
                                                                                       data_class);
                         results->UpdateBufferAccessCount(BufferType::Downstream, BufferAccessType::Write,
                                                          prev_downstream_wr_count +
-                                                         num_case_occurrences * tensor_spatial_partial_sum_mapping_size,
+                                                         num_case_occurrences * tensor_spatial_mapping_size,
                                                          data_class);
 
                         long prev_downstream_rd_count = results->GetBufferAccessCount(BufferType::Downstream,
@@ -190,9 +191,10 @@ namespace maestro {
                                                                                       data_class);
                         results->UpdateBufferAccessCount(BufferType::Downstream, BufferAccessType::Read,
                                                          prev_downstream_rd_count +
-                                                         num_case_occurrences * tensor_spatial_partial_sum_mapping_size,
+                                                         num_case_occurrences * tensor_spatial_mapping_size,
                                                          data_class);
-                        num_partial_sums += reuse_analysis->GetNumCriticalPathPartialSums(tensor, iteration_case);
+                        //num_partial_sums += reuse_analysis->GetNumCriticalPathPartialSums(tensor, iteration_case);
+
                     }
 
 
@@ -240,11 +242,11 @@ namespace maestro {
                                                                                       data_class);
                         results->UpdateBufferAccessCount(BufferType::Downstream, BufferAccessType::Read,
                                                          prev_downstream_rd_count +
-                                                         num_case_occurrences * tensor_spatial_partial_sum_mapping_size,
+                                                         num_case_occurrences * tensor_spatial_mapping_size,
                                                          data_class);
                     }
 
-                    double arithmetic_intensity = static_cast<double>(tensor_spatial_partial_sum_mapping_size) /
+                    double arithmetic_intensity = static_cast<double>(num_partial_sums) /
                                                   static_cast<double>(ingress_spatial_traffic);
 
                     results->SetArithmeticIntensity(arithmetic_intensity);
@@ -255,7 +257,7 @@ namespace maestro {
                     if (write_log_file && cluster_idx <= print_cluster_lv) {
                         log_file << "Overall ingress_spatial_traffic: " << ingress_spatial_traffic << std::endl;
                         log_file << "Overall egress_spatial_traffic: " << egress_spatial_traffic << std::endl;
-                        log_file << "Number of MACs over sub cluster array: " << tensor_spatial_partial_sum_mapping_size
+                        log_file << "Number of MACs over sub cluster array: " << num_partial_sums
                                  << std::endl;
                     }
 
@@ -388,7 +390,7 @@ namespace maestro {
                             results->GetRuntime(CA::EstimationType::Exact) + num_case_occurrences * outstanding_delay,
                             CA::EstimationType::Exact);
                     results->UpdateNumComputations(results->GetNumComputations() +
-                                                   num_case_occurrences * tensor_spatial_partial_sum_mapping_size);
+                                                   num_case_occurrences * num_partial_sums);
 
 
                     long double num_active_unit_clusters = 0;
@@ -452,7 +454,7 @@ namespace maestro {
                                      << std::endl;
                         }
 
-                        log_file << "num computations (per iteration): " << tensor_spatial_partial_sum_mapping_size
+                        log_file << "num computations (per iteration): " << num_partial_sums
                                  << std::endl;
                         log_file << "ingress_spatial_traffic (per iteration): " << ingress_spatial_traffic << std::endl;
                         log_file << "egress_spatial_traffic (per iteration): " << egress_spatial_traffic << std::endl;
@@ -578,8 +580,8 @@ namespace maestro {
                             auto overlapping_dim = dimensions->GetOverlappingDim(dim);
                             int sliding_dim_size = dimensions->GetSize(overlapping_dim);
                             int reference_dim_size = dimensions->GetSize(dim);;
-                            int actual_reference_dim_size = reference_dim_size;
-                            size *= reference_dim_size - sliding_dim_size + 1;
+                            int outer_stride = dimensions->GetOuterStride(dim);
+                            size *= (reference_dim_size - sliding_dim_size + outer_stride)/outer_stride;
                         } else {
                             size *= dimensions->GetSize(dim);
                         }

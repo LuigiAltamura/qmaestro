@@ -1,7 +1,7 @@
 import os
 import argparse
 
-def create_file(num_pes, l1_size_cstr, l2_size_cstr, noc_bw_cstr, offchip_bw_cstr=512):
+def create_file(num_pes, l1_size_cstr, l2_size_cstr, noc_bw_cstr, offchip_bw_cstr=2500):
     # Create the directory if it doesn't exist
     os.makedirs("data/hw", exist_ok=True)
 

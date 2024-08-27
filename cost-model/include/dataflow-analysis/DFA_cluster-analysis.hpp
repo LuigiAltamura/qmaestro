@@ -239,29 +239,32 @@ namespace maestro {
                     auto directive_var = directive->GetVariable();
                     int outer_stride = cluster_dimensions->GetOuterStride(directive_var);
 
-                    if(cluster_dimensions->IsOverlapped(directive_var) && !cluster_dimensions->IsSlidingDim(directive_var) && outer_stride != 1) {
+                    if(cluster_dimensions->IsOverlapped(directive_var) && !cluster_dimensions->IsSlidingDim(directive_var)) {
                         int map_size = directive->GetSize();
-                        int ofs_size = directive->GetOfs();
                         int directive_idx = cluster_dataflow->GetDirectiveIdx(directive_var);
 
                         auto sliding_dim = cluster_dimensions->GetOverlappingDim(directive_var);
 
                         int sliding_dim_size = full_dimensions_->GetSize(sliding_dim);
-                        int reference_dim_size = cluster_dimensions->GetSize(directive_var);
 
                         if(map_size >= full_dimensions_->GetSize(sliding_dim)) {
-                            int output_map_size = (map_size + outer_stride -  sliding_dim_size) / outer_stride; // Implicit flooring
-                            int adjusted_map_size = output_map_size * std::min(outer_stride, sliding_dim_size) + std::max(sliding_dim_size - outer_stride, 0);
-                            int adjusted_ofs_size = output_map_size * outer_stride; //std::min(outer_stride, sliding_dim_size);
 
-                            if(!is_top_cluster && sliding_dim_size < outer_stride) {
-                                adjusted_ofs_size = output_map_size * sliding_dim_size;
+                            int adjusted_map_size, adjusted_ofs_size;
+
+                            if (outer_stride > 1){
+                                int output_map_size = (map_size + outer_stride -  sliding_dim_size) / outer_stride; // Implicit flooring
+                                adjusted_map_size = output_map_size * outer_stride + std::max(sliding_dim_size - outer_stride, 0);
+                                adjusted_ofs_size = output_map_size * outer_stride; //std::min(outer_stride, sliding_dim_size);
+
+                            }else{
+                                adjusted_map_size = map_size;
+                                adjusted_ofs_size = map_size - sliding_dim_size +1;
                             }
+
 
                             cluster_dataflow->at(directive_idx)->SetSize(adjusted_map_size);
                             cluster_dataflow->at(directive_idx)->SetOfs(adjusted_ofs_size);
 
-                            int adjusted_dim_size;
                         }
                     }
                 }

@@ -24,6 +24,6 @@ env.Append(CPPPATH=['/opt/homebrew/Cellar/boost/1.82.0_1/include/'])
 env.Append(LIBPATH=['/opt/homebrew/lib'])
 #env.Program("maestro-top.cpp")
 #env.Program('maestro', ['maestro-top.cpp', 'lib/src/maestro_v3.cpp', 'lib/src/BASE_base-objects.cpp' ])
-env.Program('maestro', ['maestro-top.cpp', 'cost-model/src/BASE_base-objects.cpp' ])
+env.Program('qmaestro', ['maestro-top.cpp', 'cost-model/src/BASE_base-objects.cpp' ])
 #env.Library('maestro', ['maestro-top.cpp', 'lib/src/maestro_v3.cpp', 'lib/src/BASE_base-objects.cpp' ])
 

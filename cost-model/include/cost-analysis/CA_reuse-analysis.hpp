@@ -103,6 +103,7 @@ namespace  maestro {
                 return ret;
             }
 
+
             std::shared_ptr<DFA::DimensionTable> ConstructSubClusterDimension(
                     std::shared_ptr<DFA::IterationStatus> iter_status,
                     bool is_sp_edge_edge = false) {
@@ -119,6 +120,7 @@ namespace  maestro {
 
                     int dim_sz = 0;
 
+                    // LF; determine the dim_sz for the directive in the nested cluster (TemporalMap)
                     if(directive_class == DFA::directive::DirectiveClass::TemporalMap) {
                         if(iter_state->IsEdge()) {
                             dim_sz = (*num_mapped_elements_edge_)[dim];
@@ -127,6 +129,7 @@ namespace  maestro {
                             dim_sz = (*num_mapped_elements_)[dim];
                         }
                     } // End of if(directive_class == TemporalMap)
+
                     else if (directive_class == DFA::directive::DirectiveClass::SpatialMap) {
                         int num_sub_clusters = target_cluster_->GetNumClusters(false);
                         int num_edge_sub_clusters = target_cluster_->GetNumClusters(true);
@@ -134,15 +137,8 @@ namespace  maestro {
                         switch(iter_pos) {
                             case DFA::IterationPosition::Init: {
                                 if(iter_state->IsEdge()) {
-                                    if(num_edge_sub_clusters == 1) {
-                                        dim_sz = (*num_mapped_elements_edge_)[dim];
-                                    }
-                                    else if(is_sp_edge_edge) {
-                                        dim_sz = (*num_mapped_elements_edge_)[dim];
-                                    }
-                                    else {
-                                        dim_sz = (*num_mapped_elements_)[dim];
-                                    }
+                                    if(is_sp_edge_edge) {dim_sz = (*num_mapped_elements_edge_)[dim];}
+                                    else {dim_sz = (*num_mapped_elements_)[dim];}
                                 }
                                 else {
                                     dim_sz = (*num_mapped_elements_)[dim];
@@ -154,15 +150,8 @@ namespace  maestro {
                                 break;
                             }
                             case DFA::IterationPosition::Edge: {
-                                if(num_edge_sub_clusters == 1) {
-                                    dim_sz = (*num_mapped_elements_edge_)[dim];
-                                }
-                                else if(is_sp_edge_edge) {
-                                    dim_sz = (*num_mapped_elements_edge_)[dim];
-                                }
-                                else {
-                                    dim_sz = (*num_mapped_elements_)[dim];
-                                }
+                                if(is_sp_edge_edge) {dim_sz = (*num_mapped_elements_edge_)[dim];}
+                                else {dim_sz = (*num_mapped_elements_)[dim];}
                                 break;
                             }
                             default:{
@@ -172,28 +161,31 @@ namespace  maestro {
                     } // End of else if(directive_class == SpatialMap)
 
                     auto outer_stride = curr_dimension->GetOuterStride(dim);
-                    auto inner_stride = curr_dimension->GetOuterStride(dim);
+                    auto inner_stride = curr_dimension->GetInnerStride(dim);
                     auto dim_sub_cluster = std::make_shared<DFA::LayerDimension>(dim, dim_sz,outer_stride, inner_stride);
 
+                    // LF: dimension table
                     ret->AddDimension(dim_sub_cluster);
                 } // End of for_each (directive) in (dataflow)
 
                 for(auto& directive : *dataflow) {
                     auto dim = directive->GetVariable();
 
+                    // LF: create the output dimensions fro Y and X (Y' and X')
                     if(dim == DFSL::layer_dim_input_height_) {
-                        int output_sz = ret->GetSize(dim) - ret->GetSize(DFSL::layer_dim_weight_height_) + 1;
+                        int output_sz = std::max(0,(ret->GetSize(dim) - ret->GetSize(DFSL::layer_dim_weight_height_) + ret->GetOuterStride(dim))/ret->GetOuterStride(dim));
                         auto output_dim_sub_cluster = std::make_shared<DFA::LayerDimension>(DFSL::layer_dim_output_height_, output_sz, 1, 1);
 
                         ret->AddDimension(output_dim_sub_cluster);
                     }
                     else if (dim == DFSL::layer_dim_input_width_) {
-                        int output_sz = ret->GetSize(dim) - ret->GetSize(DFSL::layer_dim_weight_width_) + 1;
+                        int output_sz = std::max(0,(ret->GetSize(dim) - ret->GetSize(DFSL::layer_dim_weight_width_) + ret->GetOuterStride(dim))/ret->GetOuterStride(dim));
                         auto output_dim_sub_cluster = std::make_shared<DFA::LayerDimension>(DFSL::layer_dim_output_width_, output_sz, 1, 1);
 
                         ret->AddDimension(output_dim_sub_cluster);
                     }
 
+                    // LF create info about overlapped dimensions
                     if(curr_dimension->IsOverlapped(dim)) {
                         if(!curr_dimension->IsSlidingDim(dim)) {
                             auto sliding_dim = curr_dimension->GetOverlappingDim(dim);
@@ -288,6 +280,7 @@ namespace  maestro {
 
                 int changing_dim_directive_idx = GetInnermostUpdatedDimDirectiveID(input_tensor, iter_status);
                 bool is_tensor_overall_inited = IsTensorInited(input_tensor, iter_status, changing_dim_directive_idx);
+                //All states are INIT
                 bool is_all_reset = (changing_dim_directive_idx == -1);
 
                 if(is_all_reset) {
@@ -557,12 +550,10 @@ namespace  maestro {
                 auto output_coupled_var_list = output_tensor->GetCoupledVariables();
 
                 long ret = 1;
-
                 if(get_num_partial_sums) {
                     for(auto& directive : *dataflow) {
                         auto dim = directive->GetVariable();
                         auto directive_class = directive->GetClass();
-
                         if(directive_class == DFA::directive::DirectiveClass::TemporalMap) {
                             if(std::find(output_coupled_var_list->begin(), output_coupled_var_list->end(), dim) == output_coupled_var_list->end()) {
 
@@ -582,64 +573,26 @@ namespace  maestro {
                                 auto iter_position = iter_state->GetIterPosition();
                                 switch(iter_position) {
                                     case DFA::IterationPosition::Init: {
-                                        if(iter_state->IsEdge() && is_sp_edge_edge_pe) {
-                                            int num_active_sub_clusters = target_cluster_->GetNumClusters(true);
-
-                                            if(num_active_sub_clusters == 1 && (is_first_pe  || is_sp_edge_edge_pe)) {
+                                        if(iter_state->IsEdge()) {
+                                            if (is_sp_edge_edge_pe)
                                                 ret *= (*num_mapped_elements_edge_)[dim];
-                                            }
-                                            else if (num_active_sub_clusters > 1) {
-                                                if(is_sp_edge_edge_pe) {
-                                                    ret *= (*num_mapped_elements_edge_)[dim];
-                                                }
-                                                else if (is_first_pe) {
-                                                    ret *= (*num_mapped_elements_)[dim];
-                                                }
-                                                else {
-                                                    if((*num_unique_elements_)[dim] != 0)
-                                                        ret *= (*num_unique_elements_)[dim];
-                                                }
-                                            }
+                                            else
+                                                ret *= (*num_mapped_elements_)[dim];
                                         }
                                         else {
-                                            if(is_first_pe) {
-                                                ret *= (*num_mapped_elements_)[dim];
-                                            }
-                                            else {
-                                                if((*num_unique_elements_)[dim] != 0)
-                                                    ret *= (*num_unique_elements_)[dim];
-                                            }
+                                            ret *= (*num_mapped_elements_)[dim];
                                         }
                                         break;
                                     }
                                     case DFA::IterationPosition::Steady: {
-                                        if(is_first_pe) {
-                                            ret *= (*num_mapped_elements_)[dim];
-                                        }
-                                        else {
-                                            if((*num_unique_elements_)[dim] != 0)
-                                                ret *= (*num_unique_elements_)[dim];
-                                        }
-
+                                        ret *= (*num_mapped_elements_)[dim];
                                         break;
                                     }
                                     case DFA::IterationPosition::Edge: {
-                                        int num_active_sub_clusters = target_cluster_->GetNumClusters(true);
-                                        if(num_active_sub_clusters == 1 && (is_first_pe  || is_sp_edge_edge_pe)) {
+                                        if (is_sp_edge_edge_pe)
                                             ret *= (*num_mapped_elements_edge_)[dim];
-                                        }
-                                        else if (num_active_sub_clusters > 1) {
-                                            if(is_sp_edge_edge_pe) {
-                                                ret *= (*num_unique_elements_edge_)[dim];
-                                            }
-                                            else if (is_first_pe) {
-                                                ret *= (*num_mapped_elements_)[dim];
-                                            }
-                                            else {
-                                                if((*num_unique_elements_)[dim] != 0)
-                                                    ret *= (*num_unique_elements_)[dim];
-                                            }
-                                        }
+                                        else
+                                            ret *= (*num_mapped_elements_)[dim];
                                         break;
                                     }
                                     default: {
@@ -650,6 +603,66 @@ namespace  maestro {
                             } // End of if(directive_var is not in output coupled variables)
                         } // End of else if(directive_class == SpatialMap)
                     } // End of for each (directive) in (dataflow)
+                    for(auto& dim : *output_coupled_var_list) {
+                        int directive_idx = dataflow->GetDirectiveIdx(dim);
+                        auto directive = dataflow->at(directive_idx);
+                        auto directive_class = directive->GetClass();
+                        auto iter_state = iter_status->GetIterState(dim);
+                        auto iter_position = iter_state->GetIterPosition();
+
+                        std::string actual_dim = dim;
+
+                        if(dim == DFSL::layer_dim_input_height_) {
+                            actual_dim = DFSL::layer_dim_output_height_;
+                        }
+                        else if(dim == DFSL::layer_dim_input_width_) {
+                            actual_dim = DFSL::layer_dim_output_width_;
+                        }
+
+                        if(directive_class == DFA::directive::DirectiveClass::TemporalMap) {
+                            auto iter_state = iter_status->GetIterState(dim);
+                            if(iter_state->IsEdge()) {
+                                ret *= (*num_mapped_elements_edge_)[actual_dim];
+                            }
+                            else {
+                                ret *= (*num_mapped_elements_)[actual_dim];
+                            }
+                        }// End of if(directive_class == TemporalMap)
+                        else if (directive_class == DFA::directive::DirectiveClass::SpatialMap) {
+
+                            switch(iter_position) {
+                                case DFA::IterationPosition::Init: {
+                                    if(iter_state->IsEdge()) {
+                                        if (is_sp_edge_edge_pe)
+                                            ret *= (*num_mapped_elements_edge_)[actual_dim];
+                                        else
+                                            ret *= (*num_mapped_elements_)[actual_dim];
+                                    }
+                                    else {
+                                        ret *= (*num_mapped_elements_)[actual_dim];
+                                    }
+                                    break;
+                                }
+                                case DFA::IterationPosition::Steady: {
+                                    ret *= (*num_mapped_elements_)[actual_dim];
+                                    break;
+                                }
+                                case DFA::IterationPosition::Edge: {
+                                    if (is_sp_edge_edge_pe)
+                                        ret *= (*num_mapped_elements_edge_)[actual_dim];
+                                    else
+                                        ret *= (*num_mapped_elements_)[actual_dim];
+                                    break;
+                                }
+                                default: {
+                                    //TODO: Handler this error
+                                    error_handler_->TerminateProgram();
+                                }
+                            } // End of switch(iter_position)
+                        } // End of else if (directive_class == SpatialMap)
+                    } // End of for_each (var) in (output_coupled_list)
+
+                    return ret;
                 } // End of if(get_partial_sums)
 
                 for(auto& dim : *output_coupled_var_list) {
@@ -659,7 +672,6 @@ namespace  maestro {
                     auto iter_state = iter_status->GetIterState(dim);
                     auto iter_position = iter_state->GetIterPosition();
 
-                    bool is_ref_dim = dimensions->IsOverlapped(dim) && !dimensions->IsSlidingDim(dim);
                     std::string actual_dim = dim;
 
                     if(dim == DFSL::layer_dim_input_height_) {
@@ -681,11 +693,11 @@ namespace  maestro {
                                 break;
                             }
                             case DFA::IterationPosition::Steady: {
-                                ret *= (*num_mapped_elements_)[actual_dim];
+                                ret *= (*num_unique_elements_)[actual_dim];
                                 break;
                             }
                             case DFA::IterationPosition::Edge: {
-                                ret *= (*num_mapped_elements_edge_)[actual_dim];
+                                ret *= (*num_unique_elements_edge_)[actual_dim];
                                 break;
                             }
                             default: {
@@ -695,33 +707,34 @@ namespace  maestro {
                         } // End of switch(iter_position)
                     }// End of if(directive_class == TemporalMap)
                     else if (directive_class == DFA::directive::DirectiveClass::SpatialMap) {
-                        int num_sub_clusters = target_cluster_->GetNumClusters(false);
 
                         switch(iter_position) {
                             case DFA::IterationPosition::Init: {
-                                if(iter_state->IsEdge() && is_sp_edge_edge_pe) {
+                                if(iter_state->IsEdge()) {
                                     int num_active_sub_clusters = target_cluster_->GetNumClusters(true);
 
-                                    if(num_active_sub_clusters == 1 && (is_first_pe  || is_sp_edge_edge_pe)) {
-                                        ret *= (*num_mapped_elements_edge_)[actual_dim];
-                                    }
-                                    else if (num_active_sub_clusters > 1) {
-                                        if(is_sp_edge_edge_pe) {
-                                            if(consider_reuse_at_edge)
-                                                ret *= (*num_unique_elements_edge_)[actual_dim];
-                                            else
-                                                ret *= (*num_mapped_elements_edge_)[actual_dim];
-                                        }
-                                        else if (is_first_pe) {
+                                    if (num_active_sub_clusters == 1) {
+                                        if (is_sp_edge_edge_pe)
+                                            ret *= (*num_mapped_elements_edge_)[actual_dim];
+                                        else
                                             ret *= (*num_mapped_elements_)[actual_dim];
-                                        }
-                                        else {
-                                            if((*num_unique_elements_)[actual_dim] != 0)
+                                    } else if (num_active_sub_clusters > 1) {
+                                        if (is_first_pe) {
+                                            ret *= (*num_mapped_elements_)[actual_dim];
+                                        } else {
+                                            if (is_sp_edge_edge_pe) {
+                                                if (consider_reuse_at_edge){
+                                                    if((*num_unique_elements_edge_)[actual_dim] != 0)
+                                                        ret *= (*num_unique_elements_edge_)[actual_dim];
+                                                }
+                                                else
+                                                    ret *= (*num_mapped_elements_edge_)[actual_dim];
+                                            } else {
                                                 ret *= (*num_unique_elements_)[actual_dim];
+                                            }
                                         }
                                     }
-                                }
-                                else {
+                                }else{
                                     if(is_first_pe) {
                                         ret *= (*num_mapped_elements_)[actual_dim];
                                     }
@@ -744,19 +757,25 @@ namespace  maestro {
                             }
                             case DFA::IterationPosition::Edge: {
                                 int num_active_sub_clusters = target_cluster_->GetNumClusters(true);
-                                if(num_active_sub_clusters == 1 && (is_first_pe  || is_sp_edge_edge_pe)) {
-                                    ret *= (*num_mapped_elements_edge_)[dim];
-                                }
-                                else if (num_active_sub_clusters > 1) {
-                                    if(is_sp_edge_edge_pe) {
-                                        ret *= (*num_unique_elements_edge_)[actual_dim];
-                                    }
-                                    else if (is_first_pe) {
+                                if (num_active_sub_clusters == 1) {
+                                    if (is_sp_edge_edge_pe)
+                                        ret *= (*num_mapped_elements_edge_)[actual_dim];
+                                    else
                                         ret *= (*num_mapped_elements_)[actual_dim];
-                                    }
-                                    else {
-                                        if((*num_unique_elements_)[actual_dim] != 0)
+                                } else if (num_active_sub_clusters > 1) {
+                                    if (is_first_pe) {
+                                        ret *= (*num_mapped_elements_)[actual_dim];
+                                    } else {
+                                        if (is_sp_edge_edge_pe) {
+                                            if (consider_reuse_at_edge){
+                                                if((*num_unique_elements_edge_)[actual_dim] != 0)
+                                                    ret *= (*num_unique_elements_edge_)[actual_dim];
+                                            }
+                                            else
+                                                ret *= (*num_mapped_elements_edge_)[actual_dim];
+                                        } else {
                                             ret *= (*num_unique_elements_)[actual_dim];
+                                        }
                                     }
                                 }
                                 break;
@@ -953,12 +972,11 @@ namespace  maestro {
 
                         if(num_edge_clusters > 1) {
                             int num_sp_edge_edge_cluster = has_sp_edge_edge? 1 : 0;
-                            int num_full_spmap_clusters = num_edge_clusters - num_sp_edge_edge_cluster -1 ; //-1: Init
+                            int num_full_spmap_clusters = num_edge_clusters - num_sp_edge_edge_cluster -1 ; //-1: First PE
                             num_full_spmap_clusters = std::max(num_full_spmap_clusters, 0);
 
                             ret += num_full_spmap_clusters * GetPEEgressVolume(output_tensor, iter_status, for_partial_sum, true, false);
                             ret += num_sp_edge_edge_cluster * GetPEEgressVolume(output_tensor, iter_status, for_partial_sum, false, true, false);
-                            long tmp = GetPEEgressVolume(output_tensor, iter_status, for_partial_sum, true, false);
                         }
                     }
                 }
@@ -983,7 +1001,12 @@ namespace  maestro {
             std::unique_ptr<std::map<std::string, int>> num_reused_elements_sp_edge_;
 
         private:
-
+            /**
+             *
+             * @param input_tensor
+             * @param iter_status
+             * @return the innermost state in the iter status that changes from Init to another state (Steady or Edge)
+             */
             int GetInnermostUpdatedDimDirectiveID(
                     std::shared_ptr<DFA::Tensor> input_tensor,
                     std::shared_ptr<DFA::IterationStatus> iter_status) {
@@ -1010,7 +1033,15 @@ namespace  maestro {
                 return prime_change_dim_directive_idx;
             }
 
-
+            /**
+             *
+             * @param input_tensor
+             * @param iter_status object representing the current iteration status
+             * @param changing_dim_idx an integer representing the index of the innermost dimension directive that has changed
+             * @return true if the tensor has been initialized by verifying if any dimension directive associated with
+             * the tensor is in the initialization position after the innermost changing dimension if is not unrolled and
+             * the dimension is coupled, false otherwise
+             */
             bool IsTensorInited(
                     std::shared_ptr<DFA::Tensor> input_tensor,
                     std::shared_ptr<DFA::IterationStatus> iter_status,
@@ -1090,6 +1121,8 @@ namespace  maestro {
             } // End of void AnalyzeMappingSizes
 
 
+
+
             void AnalyzeOutputMappingSizes(std::shared_ptr<DFA::ClusterUnit> target_cluster) {
                 auto dataflow = target_cluster->GetDataflow();
                 auto dimensions = target_cluster->GetDimensions();
@@ -1105,13 +1138,27 @@ namespace  maestro {
 
                             //TODO: This is only for DNN ops. Generalize this for arbitrary ops. (Mostly, it'll be fine though)
                             auto output_var = (directive_var == DFSL::layer_dim_input_height_)? DFSL::layer_dim_output_height_ : DFSL::layer_dim_output_width_;
+                            auto outer_stride = dimensions ->GetOuterStride(directive_var);
+                            (*num_mapped_elements_)[output_var] = ((*num_mapped_elements_)[directive_var] - (*num_mapped_elements_)[sliding_dim])/outer_stride + 1;
 
-                            (*num_mapped_elements_)[output_var] = (*num_mapped_elements_)[directive_var] - (*num_mapped_elements_)[sliding_dim] + 1;
-                            (*num_unique_elements_)[output_var] = std::min(directive->GetOfs(), directive->GetSize());
+                            if( (directive->GetSize() - directive->GetOfs()) >= dimensions->GetSize(sliding_dim)){
+                                auto numb_repeated_elements = (directive->GetSize() - directive->GetOfs() - dimensions->GetSize(sliding_dim)) / outer_stride + 1;
+                                (*num_unique_elements_)[output_var] = (*num_mapped_elements_)[output_var] - numb_repeated_elements;
+                            }
+                            else
+                                (*num_unique_elements_)[output_var] = (*num_mapped_elements_)[output_var];
+
                             //TODO: The following assumes legal dataflow; this will yield wield results for illegal dataflows
-                            (*num_mapped_elements_edge_)[output_var] = (*num_mapped_elements_edge_)[directive_var] - (*num_mapped_elements_edge_)[sliding_dim] + 1;
-                            (*num_unique_elements_edge_)[output_var] = std::min(directive->GetOfs(), (*num_mapped_elements_edge_)[output_var]);
 
+                            (*num_mapped_elements_edge_)[output_var] = std::max(0, ((*num_mapped_elements_edge_)[directive_var] - (*num_mapped_elements_edge_)[sliding_dim] + outer_stride)/outer_stride );
+
+                            //(*num_unique_elements_edge_)[output_var] = std::min(directive->GetOfs(), (*num_mapped_elements_edge_)[output_var]);
+                            if( (directive->GetSize() - directive->GetOfs()) >= dimensions->GetSize(sliding_dim)){
+                                auto numb_repeated_elements = (directive->GetSize() - directive->GetOfs() - dimensions->GetSize(sliding_dim)) / outer_stride + 1;
+                                (*num_unique_elements_)[output_var] = (*num_mapped_elements_)[output_var] - numb_repeated_elements;
+                            }
+                            else
+                                (*num_unique_elements_edge_)[output_var] = (*num_mapped_elements_edge_)[output_var];
                         }
                     } // End of if(directve_class == tMap or sMap)
                 } // End of for(auto directive : dataflow)
