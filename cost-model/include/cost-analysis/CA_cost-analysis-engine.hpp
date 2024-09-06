@@ -59,7 +59,7 @@ namespace maestro {
 
                 std::shared_ptr<std::vector<std::shared_ptr<CostAnalysisResults>>> ret = std::make_shared<std::vector<std::shared_ptr<CostAnalysisResults>>>();
 
-                AnalyzeClusterLevel_V2(0, clusters_->size(), clusters_->GetCluster(0)->GetDimensions(), ret, 1, true,
+                AnalyzeClusterLevel_V2(0, clusters_->size(), clusters_->GetCluster(0)->GetDimensions(), ret, 2, true,
                                        write_log_file);
 
                 return ret;
@@ -161,8 +161,8 @@ namespace maestro {
                         if (write_log_file && cluster_idx <= print_cluster_lv) {
                             log_file << "Output Tensor " << tensor->GetTensorName() << std::endl;
                             log_file << "\tegress_traffic " << tensor_egress_traffic << std::endl;
-                            log_file << "\tspatial_mapping_size" << tensor_spatial_mapping_size << std::endl;
-                            log_file << "\tnum_partial_sums"
+                            log_file << "\tspatial_mapping_size " << tensor_spatial_mapping_size << std::endl;
+                            log_file << "\tnum_partial_sums "
                                      << num_partial_sums << std::endl;
                         }
 

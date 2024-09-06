@@ -565,19 +565,13 @@ namespace maestro {
             long l2_rd_input_count = 0;
             long l2_rd_weight_count = 0;
             long l2_rd_output_count = 0;
+
             long l2_wr_input_count = 0;
             long l2_wr_weight_count = 0;
             long l2_wr_output_count = 0;
 
-            long l2_to_l1_rd_input_count = 0;
-            long l2_to_l1_rd_weight_count = 0;
-
             long l2_to_l1_wr_input_count = 0;
             long l2_to_l1_wr_weight_count = 0;
-
-            long l1_to_l0_rd_input_count = 0;
-            long l1_to_l0_rd_weight_count = 0;
-            long l1_to_l0_rd_output_count = 0;
 
             long l1_rd_input_count = 0;
             long l1_rd_weight_count = 0;
@@ -594,7 +588,6 @@ namespace maestro {
             long max_noc_bw_req = 0;
             long max_offchip_bw_req = 0;
             for(auto& layer_res : *analysis_result) {
-                //CAMBIARE CONF e ACCELERATOR
 
                 auto quantizationType = configuration_->network_->at(layer_id - 1)->getQuantization();
                 configuration_->num_pes_ = configuration_->num_pes_file_ * quantizationFactor(quantizationType);
@@ -603,7 +596,13 @@ namespace maestro {
                 LayerType layer_type;
                 int cluster_lv = 0;
                 long layer_runtime = 0;
+
                 double layer_energy = 0;
+                double layer_MAC_energy = 0;
+                double layer_L1_energy = 0;
+                double layer_L2_energy = 0;
+                double layer_NoC_energy = 0;
+
                 long double layer_perf_per_energy;
                 double area;
                 double power;
@@ -672,8 +671,8 @@ namespace maestro {
                         l2_size += cluster_res->GetBufferSizeReq(maestro::CA::BufferType::Upstream,
                                                                  maestro::DataClass::Weight);
 
-                        layer_energy += (l2_rd_weight_count + l2_rd_input_count +l2_rd_output_count) * maestro::getMemoryEnergyMultiplier(l2_size, quantizationType, maestro::Operation::Read);
-                        layer_energy += (l2_wr_input_count + l2_wr_weight_count + l2_wr_output_count) * maestro::getMemoryEnergyMultiplier(l2_size, quantizationType, maestro::Operation::Write);
+                        layer_L2_energy += (l2_rd_weight_count + l2_rd_input_count +l2_rd_output_count) * maestro::getMemoryEnergyMultiplier(l2_size, quantizationType, maestro::Operation::Read);
+                        layer_L2_energy += (l2_wr_input_count + l2_wr_weight_count + l2_wr_output_count) * maestro::getMemoryEnergyMultiplier(l2_size, quantizationType, maestro::Operation::Write);
 
                         num_psums = cluster_res->GetNumComputations();
 
@@ -682,7 +681,7 @@ namespace maestro {
                         l1_rd_input_count = cluster_res->GetBufferAccessCount(maestro::CA::BufferType::Downstream,
                                                                               maestro::CA::BufferAccessType::Read,
                                                                               maestro::DataClass::Input) /
-                                quantizationFactor(quantizationType);
+                                            quantizationFactor(quantizationType);
 
                         l1_rd_weight_count = cluster_res->GetBufferAccessCount(maestro::CA::BufferType::Downstream,
                                                                                maestro::CA::BufferAccessType::Read,
@@ -704,36 +703,15 @@ namespace maestro {
                                                                                maestro::CA::BufferAccessType::Write,
                                                                                maestro::DataClass::Output)/
                                              quantizationFactor(quantizationType);
+
+                        layer_L1_energy += (l1_rd_input_count + l1_rd_weight_count + l1_rd_output_count) * maestro::getMemoryEnergyMultiplier(l1_size, quantizationType, maestro::Operation::Read);
+                        layer_L1_energy += (l1_wr_input_count + l1_wr_weight_count + l1_wr_output_count) * maestro::getMemoryEnergyMultiplier(l1_size, quantizationType, maestro::Operation::Write);
                     }
                     if (cluster_lv == 0) {
-                        /*
-                        l1_rd_input_count = cluster_res->GetBufferAccessCount(maestro::CA::BufferType::Downstream, maestro::CA::BufferAccessType::Read, maestro::DataClass::Input);
-                        l1_rd_weight_count = cluster_res->GetBufferAccessCount(maestro::CA::BufferType::Downstream, maestro::CA::BufferAccessType::Read, maestro::DataClass::Weight);
-                        l1_rd_output_count = cluster_res->GetBufferAccessCount(maestro::CA::BufferType::Downstream, maestro::CA::BufferAccessType::Read, maestro::DataClass::Output);
-                        l1_wr_input_count = cluster_res->GetBufferAccessCount(maestro::CA::BufferType::Downstream, maestro::CA::BufferAccessType::Write, maestro::DataClass::Input);
-                        l1_wr_weight_count = cluster_res->GetBufferAccessCount(maestro::CA::BufferType::Downstream, maestro::CA::BufferAccessType::Write, maestro::DataClass::Weight);
-                        l1_wr_output_count = cluster_res->GetBufferAccessCount(maestro::CA::BufferType::Downstream, maestro::CA::BufferAccessType::Write, maestro::DataClass::Output);
-                        */
 
                         long num_sub_clusters = cluster_res->GetNumSubClusters();
                         long num_cur_clusters = num_pes / num_sub_clusters;
                         num_bottom_clusters = num_cur_clusters;
-
-                        l1_to_l0_rd_input_count =
-                                (cluster_res->GetBufferAccessCount(maestro::CA::BufferType::Downstream,
-                                                                   maestro::CA::BufferAccessType::Read,
-                                                                   maestro::DataClass::Input) - l1_wr_input_count) *
-                                num_pes * num_iters;
-                        l1_to_l0_rd_weight_count =
-                                (cluster_res->GetBufferAccessCount(maestro::CA::BufferType::Downstream,
-                                                                   maestro::CA::BufferAccessType::Read,
-                                                                   maestro::DataClass::Weight) - l1_wr_weight_count) *
-                                num_pes * num_iters;
-                        l1_to_l0_rd_output_count =
-                                (cluster_res->GetBufferAccessCount(maestro::CA::BufferType::Downstream,
-                                                                   maestro::CA::BufferAccessType::Read,
-                                                                   maestro::DataClass::Output) - l1_wr_output_count) *
-                                num_pes * num_iters;
 
                         l1_size += cluster_res->GetBufferSizeReq(maestro::CA::BufferType::Downstream,
                                                                  maestro::DataClass::Input);
@@ -741,15 +719,29 @@ namespace maestro {
                                                                  maestro::DataClass::Output);
                         l1_size += cluster_res->GetBufferSizeReq(maestro::CA::BufferType::Downstream,
                                                                  maestro::DataClass::Weight);
-
-
-                        layer_energy += (l1_rd_input_count + l1_rd_weight_count + l1_rd_output_count) * maestro::getMemoryEnergyMultiplier(l1_size, quantizationType, maestro::Operation::Read);
-                        layer_energy += (l1_wr_input_count + l1_wr_weight_count + l1_wr_output_count) * maestro::getMemoryEnergyMultiplier(l1_size, quantizationType, maestro::Operation::Write);
                     }
                     cluster_lv++;
                 }
 
-                layer_energy += num_psums * maestro::DSE::cost::mac_energy_func(quantizationType);
+                layer_MAC_energy += num_psums * maestro::DSE::cost::mac_energy_func(quantizationType);
+
+
+                //NoC energy expressed in nJ
+                layer_NoC_energy += top_res ->GetAvgBWReq() * (double) top_res->GetRuntime() *
+                        (double) maestro::getBitSize(quantizationType) * maestro::return_hop_number(quantizationType) *
+                        maestro::energy_cost_per_bit * 1e9;
+                /*
+                 * NoC energy (TO BE COMPLETED)
+                 * layer_NoC_energy += top_res->GetAvgBWReq() * top_res->GetRuntime() * BITWIDTH_OPERANDS * AVG_NUMBER_HOPS * ENERGY_COST_PER_BIT; // J
+                 * with:
+                 * - BITWIDTH_OPERANDS = depends on quantization
+                 * - AVG_NUMBER_HOPS = 2 for 2 clusters, 3 for 3 clusters
+                 * - ENERGY_COST_PER_BIT = 0.1143e-12; // J/bit/hop
+                 */
+
+                // total energy
+                layer_energy = layer_MAC_energy + layer_L2_energy + layer_L1_energy + layer_NoC_energy;
+
 
                 layer_perf_per_energy = static_cast<long double>(num_psums) / static_cast<long double>(layer_runtime) /
                                         static_cast<long double>(layer_energy);
@@ -805,9 +797,13 @@ namespace maestro {
                 compute_delay_[static_cast<int>(CA::ValueType::Max)] = cluster_res->GetDelay(CA::DelayType::Computation, CA::ValueType::Max);
                 */
 
+                /*
+                 * LF: implement a function which includes the printout of the energy components
+                 */
+
                 csv_writer->WriteDesignPoint(configuration_, tensor_info_idx, layer_dp, GetNetworkName(), layer_name,
-                                             num_psums, input_tensor_size, weight_tensor_size, ops_per_joule, pe_power,
-                                             l1_power, l2_power, noc_power, top_res, quantizationType);
+                                             num_psums, input_tensor_size, weight_tensor_size, ops_per_joule, layer_MAC_energy,
+                                             layer_L1_energy, layer_L2_energy, layer_NoC_energy, top_res, quantizationType);
 
                 if (top_res->GetPeakBWReq() > max_noc_bw_req) {
                     max_noc_bw_req = top_res->GetPeakBWReq();
@@ -836,7 +832,6 @@ namespace maestro {
             //
 
         }
-
 
 
         void PrintAnalysisResultsSingleCluster(std::shared_ptr<CA::CostAnalysisResults> results, std::shared_ptr<CA::CostAnalysisResults> inner_results) {
