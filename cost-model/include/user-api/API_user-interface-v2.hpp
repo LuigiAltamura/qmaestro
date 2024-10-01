@@ -79,8 +79,8 @@ namespace maestro {
 
                 auto quantizationType = layer->getQuantization();
                 configuration_->num_pes_ = configuration_->num_pes_file_ * quantizationFactor(quantizationType);
-                // configuration_->l1_size_ = configuration_->l1_size_file_ / quantizationFactor(quantizationType);
-
+                configuration_->l1_size_ = (int) (configuration_->l1_byte_size_ * 8 / maestro::getBitSize(quantizationType));
+                configuration_->l2_size_ = (int) (configuration_->l2_byte_size_ * 8 / maestro::getBitSize(quantizationType));
 
                 auto layer_results = AnalyzeCostAllClusters(layer_id, print_results_to_screen, print_log_to_file);
                 long num_macs = this->GetNumPartialSums(layer_id);
@@ -202,8 +202,9 @@ namespace maestro {
                 configuration_->num_pes_ = ret->num_pes_;
                 configuration_->num_pes_file_ = ret->num_pes_;
                 configuration_->l1_size_ = ret->l1_size_;
-                configuration_->l1_size_file_ = ret->l1_size_;
+                configuration_->l1_byte_size_ = ret->l1_size_;
                 configuration_->l2_size_ = ret->l2_size_;
+                configuration_->l2_byte_size_ = ret->l2_size_;
                 configuration_->offchip_bw_= ret->off_chip_bw_;
                 configuration_->noc_bw_->at(0) = ret->noc_bw_;
                 configuration_->noc_bw_->at(1) = ret->noc_bw_;
@@ -463,6 +464,8 @@ namespace maestro {
 
                 auto quantizationType = layer->getQuantization();
                 configuration_->num_pes_ = configuration_->num_pes_file_ * quantizationFactor(quantizationType);
+                configuration_->l1_size_ = (int) (configuration_->l1_byte_size_ * 8 / maestro::getBitSize(quantizationType));
+                configuration_->l2_size_ = (int) (configuration_->l2_byte_size_ * 8 / maestro::getBitSize(quantizationType));
                 // configuration_->l1_size_ = configuration_->l1_size_file_ / quantizationFactor(quantizationType);
 
                 layer_id++;
@@ -591,6 +594,8 @@ namespace maestro {
 
                 auto quantizationType = configuration_->network_->at(layer_id - 1)->getQuantization();
                 configuration_->num_pes_ = configuration_->num_pes_file_ * quantizationFactor(quantizationType);
+                configuration_->l1_size_ = (int) (configuration_->l1_byte_size_ * 8 / maestro::getBitSize(quantizationType));
+                configuration_->l2_size_ = (int) (configuration_->l2_byte_size_ * 8 / maestro::getBitSize(quantizationType));
                 // configuration_->l1_size_ = configuration_->l1_size_file_ / quantizationFactor(quantizationType);
 
                 LayerType layer_type;
@@ -727,9 +732,11 @@ namespace maestro {
 
 
                 //NoC energy expressed in nJ
-                layer_NoC_energy += top_res ->GetAvgBWReq() * (double) top_res->GetRuntime() *
-                        (double) maestro::getBitSize(quantizationType) * maestro::return_hop_number(quantizationType) *
-                        maestro::energy_cost_per_bit * 1e9;
+                layer_NoC_energy += (double)((l1_rd_input_count + l1_rd_weight_count + l1_rd_output_count) +
+                        (l1_wr_input_count + l1_wr_weight_count + l1_wr_output_count)) *
+                                    (double) maestro::getBitSize(quantizationType) *
+                                    maestro::return_hop_number(quantizationType) *
+                                    maestro::energy_cost_per_bit * 1e9;
                 /*
                  * NoC energy (TO BE COMPLETED)
                  * layer_NoC_energy += top_res->GetAvgBWReq() * top_res->GetRuntime() * BITWIDTH_OPERANDS * AVG_NUMBER_HOPS * ENERGY_COST_PER_BIT; // J

@@ -62,7 +62,8 @@ namespace maestro {
                 num_pes_file_(num_pes),
                 num_pes_(num_pes),
                 simd_width_(simd_width),
-                l1_size_file_(l1_sram_byte_size),
+                l1_byte_size_(l1_sram_byte_size),
+                l2_byte_size_(l1_sram_byte_size),
                 l1_size_(l1_sram_byte_size),
                 l2_size_(l2_sram_byte_size) {
             network_= std::make_shared<DFA::NeuralNetwork>();
@@ -94,7 +95,8 @@ namespace maestro {
         int num_pes_;
         int num_pes_file_;
         int simd_width_;
-        int l1_size_file_;
+        int l1_byte_size_;
+        int l2_byte_size_;
         int l1_size_;
         int l2_size_;
         int offchip_bw_;

@@ -104,7 +104,6 @@ namespace maestro{
         switch (quantizationType) {
             case LayerQuantizationType::FP32:
             case LayerQuantizationType::INT32:
-                return 2;
             case LayerQuantizationType::FP16:
             case LayerQuantizationType::INT16:
             case LayerQuantizationType::FP8:
@@ -113,7 +112,7 @@ namespace maestro{
             case LayerQuantizationType::INT4:
             case LayerQuantizationType::FP2:
             case LayerQuantizationType::INT2:
-                return 3;
+                return 2;
             default:
                 std::cerr << "Unsupported quantization type" << std::endl;
                 exit(EXIT_FAILURE);
